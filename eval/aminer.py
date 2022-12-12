@@ -79,7 +79,7 @@ CONDITIONS = ConditionList([
 # Model with metadata (metadata used as set in CONDITIONS above)
 CONDITIONED_MODELS = [
     # SVD can use only titles not generic conditions
-    SVDRecommender(1000, use_title=True)
+    SVDRecommender(1000, use_title=True),
     AAERecommender(adversarial=False,
                    conditions=CONDITIONS,
                    lr=0.001,

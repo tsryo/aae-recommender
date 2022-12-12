@@ -20,7 +20,7 @@ from aaerec.condition import ConditionList, _check_conditions, PretrainedWordEmb
 # workdir = 'ml-100k/'
 DIS_TRAIN_FILE = 'dis-train.txt'
 
-W2V_PATH = "/data21/lgalke/vectors/GoogleNews-vectors-negative300.bin.gz"
+W2V_PATH = "/mnt/c/Development/github/Python/GoogleNews-vectors-negative300.bin.gz"
 W2V_IS_BINARY = True
 
 class IRGAN():

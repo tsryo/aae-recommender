@@ -10,6 +10,7 @@ import itertools as it
 import torch
 import scipy.sparse as sp
 import numpy as np
+import copy
 
 from sklearn.feature_extraction.text import CountVectorizer
 
@@ -135,6 +136,14 @@ class ConditionList(OrderedDict):
         for condition in self.values():
             if hasattr(condition, 'eval'):
                 condition.eval()
+
+    def __deepcopy__(self, memo): # memo is a dict of id's to copies
+        id_self = id(self)        # memoization avoids unnecesary recursion
+        _copy = memo.get(id_self)
+        if _copy is None:
+            _copy = type(self)(copy.deepcopy(list(self.items()), memo))
+            memo[id_self] = _copy
+        return _copy
 
 
 class ConditionBase(ABC):
@@ -438,6 +447,21 @@ class CategoricalCondition(ConcatenationBasedConditioning):
         assert reduce is None or reduce in ['mean','sum','max'], "Reduce neither None nor in 'mean','sum','max'"
         self.reduce = reduce
 
+    def __deepcopy__(self, memo): # memo is a dict of id's to copies
+        id_self = id(self)        # memoization avoids unnecesary recursion
+        _copy = memo.get(id_self)
+        if _copy is None:
+            _copy = type(self)(
+                copy.deepcopy(self.embedding_dim, memo),
+                copy.deepcopy(self.vocab_size, memo),
+                copy.deepcopy(self.sparse, memo),
+                copy.deepcopy(self.use_cuda, memo),
+                copy.deepcopy(self.embedding_on_gpu, memo),
+                copy.deepcopy(self.lr, memo),
+                copy.deepcopy(self.reduce, memo))
+            memo[id_self] = _copy
+        return _copy
+
     def fit(self, raw_inputs):
         """ Learn a vocabulary """
         flat_items = raw_inputs if self.reduce is None else list(it.chain.from_iterable(raw_inputs))
@@ -506,6 +530,104 @@ class CategoricalCondition(ConcatenationBasedConditioning):
     def size_increment(self):
         return self.embedding_dim
 
+
+class ContinuousCondition(ConcatenationBasedConditioning):
+    """ A *trainable* condition for continuous attributes.
+    """
+    padding_idx = 0
+
+    def __init__(self,
+                 sparse=True,
+                 use_cuda=torch.cuda.is_available(),
+                 embedding_on_gpu=False,
+                 lr=1e-3,
+                 reduce=None,
+                 **embedding_params):
+        """
+        Arguments
+        ---------
+        - lr: float - initial learning rate for Adam / SparseAdam
+        - sparse: bool - If given, use sparse embedding & optimizer
+        - reduce: None or str - if given, expect list-of-list like inputs
+                  and aggregate according to `reduce` in 'mean', 'sum', 'max'
+        """
+        # register this module's parameters with the optimizer
+        self.optimizer = None
+        self.lr = lr
+
+        # Optimization and memory storay
+        self.sparse = sparse
+        self.use_cuda = use_cuda
+        self.embedding_on_gpu = embedding_on_gpu
+        self.device = torch.device("cuda") if use_cuda else torch.device("cpu")
+
+        # We take care of vocab handling & padding ourselves
+        assert "padding_idx" not in embedding_params, "Padding is fixed with token 0"
+        self.embedding_params = embedding_params
+
+        assert reduce is None or reduce in ['mean', 'sum', 'max'], "Reduce neither None nor in 'mean','sum','max'"
+        self.reduce = reduce
+
+    def __deepcopy__(self, memo): # memo is a dict of id's to copies
+        id_self = id(self)        # memoization avoids unnecesary recursion
+        _copy = memo.get(id_self)
+        if _copy is None:
+            _copy = type(self)(
+                copy.deepcopy(self.sparse, memo),
+                copy.deepcopy(self.use_cuda, memo),
+                copy.deepcopy(self.embedding_on_gpu, memo),
+                copy.deepcopy(self.lr, memo),
+                copy.deepcopy(self.reduce, memo))
+            memo[id_self] = _copy
+        return _copy
+    def fit(self, raw_inputs):
+        """ Learn a vocabulary """
+        flat_items = raw_inputs if self.reduce is None else list(it.chain.from_iterable(raw_inputs))
+        self.embedding = nn.Identity()
+
+        if self.use_cuda and self.embedding_on_gpu:
+            # Put the embedding on GPU only when wanted
+            self.embedding = self.embedding.cuda()
+
+        self.optimizer = None
+        return self
+
+    def transform(self, raw_inputs):
+        # Actually np.array is not needed,
+        # else we would need to do the padding globally
+        if self.reduce is None:
+            return [x for x in raw_inputs]
+        else:
+            return [[x for x in l] for l in raw_inputs]
+
+    def _pad_batch(self, batch_inputs):
+        maxlen = max(len(l) for l in batch_inputs)
+        return [l + [self.padding_idx] * (maxlen - len(l)) for l in batch_inputs]
+
+    def encode(self, inputs):
+        if self.reduce is not None:
+            # inputs may have variable lengths, pad them
+            inputs = self._pad_batch(inputs)
+        inputs = torch.tensor(inputs, device=self.device)
+        inputs = inputs.to(torch.float32)
+        h = self.embedding(inputs)
+        if self.reduce is not None:
+            # self.reduce in ['mean','sum','max']
+            h = getattr(h, self.reduce)(1)
+        if self.use_cuda:
+            h = h.cuda()
+        return h[:, None]
+
+    def zero_grad(self):
+        return None
+
+    def step(self):
+        # loss.backward() to be called before by client (such as in ae_step)
+        # The condition object can update its own parameters wrt global loss
+        return None
+
+    def size_increment(self):
+        return 1
 
 
 # idk whether the following is helpful in the end.

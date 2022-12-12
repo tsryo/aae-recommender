@@ -29,7 +29,7 @@ except SystemError:
 
 torch.manual_seed(42)
 
-W2V_PATH = "/data21/lgalke/vectors/GoogleNews-vectors-negative300.bin.gz"
+W2V_PATH = "/mnt/c/Development/github/Python/GoogleNews-vectors-negative300.bin.gz"
 W2V_IS_BINARY = True
 
 TORCH_OPTIMIZERS = {
@@ -171,7 +171,7 @@ class VAE(nn.Module):
             recon_batch, mu, logvar = self(X, condition_data)
         else:
             recon_batch, mu, logvar = self(X)
-
+        recon_batch = torch.nan_to_num(recon_batch)
         loss = self.loss_function(recon_batch, X, mu, logvar)
         if use_condition:
             self.conditions.zero_grad()
@@ -257,6 +257,7 @@ class VAE(nn.Module):
                     recon_batch, mu, logvar = self(X_batch, c_batch)
                 else:
                     recon_batch, mu, logvar = self(X_batch)
+                recon_batch = torch.nan_to_num(recon_batch)
                 test_loss += self.loss_function(recon_batch, X_batch, mu, logvar).item()
                 pred.append(recon_batch.data.cpu().numpy())
 

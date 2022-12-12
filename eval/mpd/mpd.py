@@ -44,17 +44,17 @@ PLAYLIST_INFO = ['name']
 
 # TFIDF_PARAMS = { 'max_features': N_WORDS }
 
-W2V_PATH = "/data21/lgalke/vectors/GoogleNews-vectors-negative300.bin.gz"
+W2V_PATH = "/mnt/c/Development/github/Python/GoogleNews-vectors-negative300.bin.gz"
 W2V_IS_BINARY = True
-VECTORS = KeyedVectors.load_word2vec_format(W2V_PATH, binary=W2V_IS_BINARY)
+# VECTORS = KeyedVectors.load_word2vec_format(W2V_PATH, binary=W2V_IS_BINARY)
 DATA_PATH = "/data21/lgalke/datasets/MPD/data/"
 
 CONDITIONS = ConditionList([
-    ('name', PretrainedWordEmbeddingCondition(VECTORS)),
-    ('artist_name', CategoricalCondition(embedding_dim=32, reduce="sum", # vocab_size=0.01,
-                                         sparse=True, embedding_on_gpu=True)),
-    ('track_name', PretrainedWordEmbeddingCondition(VECTORS)),
-    ('album_name', PretrainedWordEmbeddingCondition(VECTORS))
+    # ('name', PretrainedWordEmbeddingCondition(VECTORS)),
+    # ('artist_name', CategoricalCondition(embedding_dim=32, reduce="sum", # vocab_size=0.01,
+    #                                      sparse=True, embedding_on_gpu=True)),
+    # ('track_name', PretrainedWordEmbeddingCondition(VECTORS)),
+    # ('album_name', PretrainedWordEmbeddingCondition(VECTORS))
 ])
 
 # These need to be implemented in evaluation.py
@@ -73,8 +73,8 @@ MODELS = [
     #AAERecommender(adversarial=True, use_side_info=True, n_epochs=55, embedding=VECTORS),
     #AAERecommender(adversarial=False, use_side_info=["name"], n_epochs=5, embedding=VECTORS),
     #DecodingRecommender(n_epochs=55, embedding=VECTORS)
-    VAERecommender(conditions=CONDITIONS, n_epochs=55, batch_size=1000),
-    DAERecommender(conditions=CONDITIONS, n_epochs=55, batch_size=1000),
+    # VAERecommender(conditions=CONDITIONS, n_epochs=55, batch_size=1000),
+    # DAERecommender(conditions=CONDITIONS, n_epochs=55, batch_size=1000),
     # Generic condition all
     #AAERecommender(adversarial=False, conditions=CONDITIONS, n_epochs=55),
     #AAERecommender(adversarial=True, conditions=CONDITIONS, n_epochs=55),

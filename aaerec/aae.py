@@ -1,4 +1,5 @@
 """ Adversarially Regualized Autoencoders """
+import pandas as pd
 # torch
 import torch
 import torch.optim as optim
@@ -22,12 +23,15 @@ from .evaluation import Evaluation
 from gensim.models.keyedvectors import KeyedVectors
 
 from .condition import _check_conditions
+import itertools as it
+import pandas as pd
+import copy
 
 
 torch.manual_seed(42)
 TINY = 1e-12
 
-W2V_PATH = "/data21/lgalke/vectors/GoogleNews-vectors-negative300.bin.gz"
+W2V_PATH = "/mnt/c/Development/github/Python/GoogleNews-vectors-negative300.bin.gz"
 W2V_IS_BINARY = True
 
 STATUS_FORMAT = "[ R: {:.4f} | D: {:.4f} | G: {:.4f} ]"
@@ -283,6 +287,7 @@ class AutoEncoder():
             z_sample = self.conditions.encode_impose(z_sample, condition_data)
 
         x_sample = self.dec(z_sample)
+        x_sample = torch.nan_to_num(x_sample)
         recon_loss = F.binary_cross_entropy(x_sample + TINY,
                                             batch.view(batch.size(0),
                                                        batch.size(1)) + TINY)
@@ -489,6 +494,7 @@ class DecodingRecommender(Recommender):
         if torch.cuda.is_available():
             inputs, y = inputs.cuda(), y.cuda()
         y_pred = self.mlp(inputs)
+        y_pred = torch.nan_to_num(y_pred)
         loss = F.binary_cross_entropy(y_pred + TINY, y + TINY)
         self.mlp_optim.zero_grad()
         self.conditions.zero_grad()
@@ -667,9 +673,11 @@ class AdversarialAutoEncoder(AutoEncoderMixin):
         z_sample = self.enc(batch)
         use_condition = _check_conditions(self.conditions, condition_data)
         if use_condition:
+            #wtf = [[x + TINY if in_list >= 3 else x for x in condition_data[in_list]] for in_list in range(len(condition_data))]
             z_sample = self.conditions.encode_impose(z_sample, condition_data)
 
         x_sample = self.dec(z_sample)
+        x_sample = torch.nan_to_num(x_sample)
         recon_loss = F.binary_cross_entropy(x_sample + TINY,
                                             batch.view(batch.size(0),
                                                        batch.size(1)) + TINY)
@@ -902,6 +910,18 @@ class AAERecommender(Recommender):
         # Anyways, this kind of stuff goes into the condition itself
         return desc
 
+
+    def __deepcopy__(self, memo): # memo is a dict of id's to copies
+        id_self = id(self)        # memoization avoids unnecesary recursion
+        _copy = memo.get(id_self)
+        if _copy is None:
+            _copy = type(self)(
+                copy.deepcopy(self.adversarial, memo),
+                copy.deepcopy(self.conditions, memo))
+            _copy.model_params = self.model_params
+            _copy.verbose = self.verbose
+            memo[id_self] = _copy
+        return _copy
 
     def train(self, training_set):
         ### DONE Adapt to generic condition ###

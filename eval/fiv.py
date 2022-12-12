@@ -99,6 +99,7 @@ CONDITIONED_MODELS = [
 ]
 
 
+# each line will be of the form: { hadm_id: "...", age: 24, gender: "M", ethnicity: "black", admission_type: "emergency", icd9_code_lst: [309.10, V10.2,...], ...}
 def load(path):
     """ Loads a single file """
     with open(path, 'r') as fhandle:

@@ -24,7 +24,7 @@ DATA_PATH = os.path.join(MPD_BASE_PATH, "data")
 TEST_PATH = os.path.join(MPD_BASE_PATH, "challenge_set.json")
 VERIFY_SCRIPT = os.path.join(MPD_BASE_PATH, "verify_submission.py")
 
-W2V_PATH = "/data21/lgalke/vectors/GoogleNews-vectors-negative300.bin.gz"
+W2V_PATH = "/mnt/c/Development/github/Python/GoogleNews-vectors-negative300.bin.gz"
 W2V_IS_BINARY = True
 
 SUBMISSION_HEADER = ["team_info",

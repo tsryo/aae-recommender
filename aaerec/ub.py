@@ -47,8 +47,7 @@ class EmbeddedVectorizer(TfidfVectorizer):
         embedding: V x D embedding matrix
         index2word: list of words with indices matching V
         """
-        super(EmbeddedVectorizer, self).__init__(self, vocabulary=index2word,
-                                                 **kwargs)
+        super(EmbeddedVectorizer, self).__init__(vocabulary=index2word, **kwargs)
         self.embedding = embedding
 
     def fit(self, raw_documents, y=None):
@@ -77,7 +76,7 @@ class GensimEmbeddedVectorizer(EmbeddedVectorizer):
         ---------
         `gensim_vectors` is expected to have index2word and syn0 defined
         """
-        index2word = gensim_vectors.index2word
+        index2word = gensim_vectors.index_to_key
         embedding = gensim_vectors.vectors
         super(GensimEmbeddedVectorizer, self).__init__(embedding,
                                                        index2word,

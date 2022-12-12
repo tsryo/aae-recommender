@@ -20,7 +20,7 @@ from gensim.models.keyedvectors import KeyedVectors
 from aaerec.condition import ConditionList, PretrainedWordEmbeddingCondition, CategoricalCondition
 
 # Set this to the word2vec Google News corpus file
-W2V_PATH = "./vectors/GoogleNews-vectors-negative300.bin.gz"
+W2V_PATH = "/mnt/c/Development/github/Python/GoogleNews-vectors-negative300.bin.gz"
 W2V_IS_BINARY = True
 
 # Command line arguments
@@ -56,11 +56,11 @@ except ValueError:
 #                     "path": os.path.join("/data22/ggerstenkorn/citation_data_preprocessing/final_data/", "mesh.csv")}
 
 # With no metadata or just titles
-DATASET = Bags.load_tabcomma_format(ARGS.dataset, unique=True)
+DATASET = Bags.load_tabcomma_format(ARGS.dataset, unique=True, owner_str="id", set_str="fold")
 # With more metadata for PubMed (generic conditions)
 # DATASET = Bags.load_tabcomma_format(ARGS.dataset, unique=True, owner_str="pmId",
 #                                     set_str="cited", meta_data_dic=mtdt_dic)
-
+ARGS.year = None
 EVAL = Evaluation(DATASET, ARGS.year, logfile=ARGS.outfile)
 EVAL.setup(min_count=ARGS.min_count, min_elements=2, drop=drop)
 

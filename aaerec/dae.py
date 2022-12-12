@@ -27,7 +27,7 @@ from aaerec.condition import ConditionList, _check_conditions, PretrainedWordEmb
 torch.manual_seed(42)
 TINY = 1e-12
 
-W2V_PATH = "/data21/lgalke/vectors/GoogleNews-vectors-negative300.bin.gz"
+W2V_PATH = "/mnt/c/Development/github/Python/GoogleNews-vectors-negative300.bin.gz"
 W2V_IS_BINARY = True
 
 STATUS_FORMAT = "[ R: {:.4f} | D: {:.4f} | G: {:.4f} ]"
@@ -137,7 +137,7 @@ class Decoder(nn.Module):
         act = self.act2(act)
         # final layer
         act = self.lin3(act)
-        act = F.sigmoid(act)
+        act = torch.sigmoid(act)
         return act
 
 
@@ -193,7 +193,7 @@ class DenoisingAutoEncoder():
         use_condition = _check_conditions(self.conditions, condition_data)
         if use_condition:
             z_sample = self.conditions.encode_impose(z_sample, condition_data)
-
+        z_sample = torch.nan_to_num(z_sample)
         x_sample = self.dec(z_sample)
         recon_loss = F.binary_cross_entropy(x_sample + TINY,
                                             batch.view(batch.size(0),
@@ -306,6 +306,7 @@ class DenoisingAutoEncoder():
                 z = self.enc(X_batch)
                 if use_condition:
                     z = self.conditions.encode_impose(z, c_batch)
+                z = torch.nan_to_num(z)
                 # reconstruct
                 X_reconstuction = self.dec(z)
                 # shift

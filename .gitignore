@@ -111,3 +111,6 @@ results/*
 # vim swp files
 *.swp
 
+# PyCharm
+.idea/*
+
