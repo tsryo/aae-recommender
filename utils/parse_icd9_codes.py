@@ -22,6 +22,12 @@ print(df.head())
 vital_hadm_ids = set(list(df_vitals['hadm_id']))
 # todo: print how many you  remove
 #print()
+icd_all = list(df['icd9_code'].values)
+icd_diag = [x for x in icd_all if type(x) != float and x[0:2] == 'd_']
+icd_proc = [x for x in icd_all if type(x) != float and x[0:2] == 'p_']
+for x in icd_all:
+    if type(x) == float:
+        print(x)
 df = df.loc[df['hadm_id'].isin(vital_hadm_ids)]
 
 READ_BUFFER_SIZE = 2048.0
@@ -37,6 +43,8 @@ df_seq_num_len = df.groupby('hadm_id')['seq_num'].apply(np.max).reset_index(name
 df = df.merge(df_seq_num_len, on='hadm_id', how='left')
 df = df.drop(['seq_num', 'first_icu_stay'], axis=1)
 df = df.drop_duplicates()
+
+
 
 GLOBAL_MEANS = {}
 GLOBAL_SDS = {}
@@ -131,6 +139,28 @@ delta_fn = lambda x: sum([x[i - 1] - x[i] for i in range(1, len(x))]) / (len(x) 
 aggr_fns_d = {"slope": slope_fn, "mean": np.nanmean, "sd": np.std, "delta": delta_fn, "min": np.min, "max": np.max}
 df = df.loc[df['age'] >= 18] # remove all non-adult entries
 all_hadm_ids = list(set(df['hadm_id']))
+all_icds  = df['icd9_code'].values
+N_icd_diag_codes_all = [x for x in all_icds if type(x) != float and x[0:2] == 'd_']
+len(N_icd_diag_codes_all)
+len(set(N_icd_diag_codes_all))
+icd_val_counts = pd.value_counts(all_icds)
+icds_more_than50_occurs = [ x[1] for x in list(zip(icd_val_counts, icd_val_counts.index)) if x[0] >= 50]
+all_icds_50 = [x for x in all_icds if x in icds_more_than50_occurs]
+
+N_icd_proc_codes_all = [x for x in all_icds if x[0:2] == 'p_']
+len(N_icd_proc_codes_all)
+len(set(N_icd_proc_codes_all))
+icd_val_counts = pd.value_counts(all_icds)
+icds_more_than50_occurs = [ x for x in icd_val_counts.to_list() if x >= 50]
+# N_icd_diag_codes all unique =
+# N_icd_diag_codes adults =
+# N_idc_diag_codes adults unique =
+#
+# N_icd_proc_codes all =
+# N_icd_proc_codes all unique =
+# N_icd_proc_codes adults =
+# N_icd_proc_codes adults unique =
+
 n_iters_needed = np.ceil(len(all_hadm_ids)/READ_BUFFER_SIZE)
 
 df_cpy = df

@@ -7,7 +7,7 @@ Run via:
 
 """
 import argparse
-
+import re
 from datetime import datetime
 import numpy as np
 import scipy.sparse as sp
@@ -35,7 +35,7 @@ METRICS = ['mrr', 'mrr@5', 'mrr@10', 'map', 'map@5', 'map@10', 'f1_old', 'f1', '
 
 W2V_IS_BINARY = True
 VECTORS = []
-LOAD_EMBEDDINGS = False
+LOAD_EMBEDDINGS = True
 if LOAD_EMBEDDINGS:
     print("Loading pre-trained embedding", W2V_PATH)
     VECTORS = KeyedVectors.load_word2vec_format(W2V_PATH, binary=W2V_IS_BINARY)
@@ -58,41 +58,212 @@ vae_params = {
     'n_hidden': 100,
     'normalize_inputs': True,
 }
-# HYPERPARAMS_TO_TRY_OPTIM = {
-#     "<class 'aaerec.aae.AAERecommender'>" : {'prior': ['gauss'],
-#                                              'gen_lr': [0.005, 0.001, 0.01],
-#                                              'reg_lr': [0.001],
-#                                              'n_code': [50],
-#                                              'n_epochs': [30],
-#                                              'batch_size': [50],
-#                                              'n_hidden': [50],
-#                                              'normalize_inputs': [True]
-#                                              },
-#     "<class 'aaerec.aae.VAERecommender'>": {'prior': ['gauss'],
-#                                              'gen_lr': [0.0001, 0.001, 0.01], #[0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-#                                              'reg_lr': [0.001],
-#                                              'n_code': [50],
-#                                              'n_epochs': [30],
-#                                              'batch_size': [50],
-#                                              'n_hidden': [50],
-#                                              'normalize_inputs': [True]
-#                                              },
-#     "<class 'aaerec.aae.DAERecommender'>": {'prior': ['gauss'],
-#                                              'gen_lr': [0.0001, 0.001, 0.01], #[0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-#                                              'reg_lr': [0.001],
-#                                              'n_code': [50],
-#                                              'n_epochs': [30],
-#                                              'batch_size': [50],
-#                                              'n_hidden': [50],
-#                                              'normalize_inputs': [True]
-#                                              }
-#
-# }
+
 
 # Metadata to use
 # optional conditions (ICD9 codes not optional)
 CONDITIONS = ConditionList([
     # ('ICD9_defs_txt', PretrainedWordEmbeddingCondition(VECTORS)),
+    ('gender', CategoricalCondition(embedding_dim=3, sparse=True, embedding_on_gpu=True)),
+    ('ethnicity_grouped', CategoricalCondition(embedding_dim=7,  sparse=True, embedding_on_gpu=True)),
+    ('admission_type', CategoricalCondition(embedding_dim=5, sparse=True, embedding_on_gpu=True)),
+    ('los_hospital', ContinuousCondition(sparse=True)),
+    ('age', ContinuousCondition(sparse=True)),
+    ('seq_num_len', ContinuousCondition(sparse=True)),
+    ('los_icu_lst_slope', ContinuousCondition(sparse=True)),
+    ('heartrate_min_lst_slope', ContinuousCondition(sparse=True)),
+    ('heartrate_max_lst_slope', ContinuousCondition(sparse=True)),
+    ('heartrate_mean_lst_slope', ContinuousCondition(sparse=True)),
+    ('sysbp_min_lst_slope', ContinuousCondition(sparse=True)),
+    ('sysbp_max_lst_slope', ContinuousCondition(sparse=True)),
+    ('sysbp_mean_lst_slope', ContinuousCondition(sparse=True)),
+    ('diasbp_min_lst_slope', ContinuousCondition(sparse=True)),
+    ('diasbp_max_lst_slope', ContinuousCondition(sparse=True)),
+    ('diasbp_mean_lst_slope', ContinuousCondition(sparse=True)),
+    ('meanbp_min_lst_slope', ContinuousCondition(sparse=True)),
+    ('meanbp_max_lst_slope', ContinuousCondition(sparse=True)),
+    ('meanbp_mean_lst_slope', ContinuousCondition(sparse=True)),
+    ('resprate_min_lst_slope', ContinuousCondition(sparse=True)),
+    ('resprate_max_lst_slope', ContinuousCondition(sparse=True)),
+    ('resprate_mean_lst_slope', ContinuousCondition(sparse=True)),
+    ('tempc_min_lst_slope', ContinuousCondition(sparse=True)),
+    ('tempc_max_lst_slope', ContinuousCondition(sparse=True)),
+    ('tempc_mean_lst_slope', ContinuousCondition(sparse=True)),
+    ('spo2_min_lst_slope', ContinuousCondition(sparse=True)),
+    ('spo2_max_lst_slope', ContinuousCondition(sparse=True)),
+    ('spo2_mean_lst_slope', ContinuousCondition(sparse=True)),
+    ('glucose_min_lst_slope', ContinuousCondition(sparse=True)),
+    ('glucose_max_lst_slope', ContinuousCondition(sparse=True)),
+    ('glucose_mean_lst_slope', ContinuousCondition(sparse=True)),
+    ('los_icu_lst_mean', ContinuousCondition(sparse=True)),
+    ('heartrate_min_lst_mean', ContinuousCondition(sparse=True)),
+    ('heartrate_max_lst_mean', ContinuousCondition(sparse=True)),
+    ('heartrate_mean_lst_mean', ContinuousCondition(sparse=True)),
+    ('sysbp_min_lst_mean', ContinuousCondition(sparse=True)),
+    ('sysbp_max_lst_mean', ContinuousCondition(sparse=True)),
+    ('sysbp_mean_lst_mean', ContinuousCondition(sparse=True)),
+    ('diasbp_min_lst_mean', ContinuousCondition(sparse=True)),
+    ('diasbp_max_lst_mean', ContinuousCondition(sparse=True)),
+    ('diasbp_mean_lst_mean', ContinuousCondition(sparse=True)),
+    ('meanbp_min_lst_mean', ContinuousCondition(sparse=True)),
+    ('meanbp_max_lst_mean', ContinuousCondition(sparse=True)),
+    ('meanbp_mean_lst_mean', ContinuousCondition(sparse=True)),
+    ('resprate_min_lst_mean', ContinuousCondition(sparse=True)),
+    ('resprate_max_lst_mean', ContinuousCondition(sparse=True)),
+    ('resprate_mean_lst_mean', ContinuousCondition(sparse=True)),
+    ('los_icu_lst_sd', ContinuousCondition(sparse=True)),
+    ('heartrate_min_lst_sd', ContinuousCondition(sparse=True)),
+    ('heartrate_max_lst_sd', ContinuousCondition(sparse=True)),
+    ('heartrate_mean_lst_sd', ContinuousCondition(sparse=True)),
+    ('sysbp_min_lst_sd', ContinuousCondition(sparse=True)),
+    ('sysbp_max_lst_sd', ContinuousCondition(sparse=True)),
+    ('sysbp_mean_lst_sd', ContinuousCondition(sparse=True)),
+    ('diasbp_min_lst_sd', ContinuousCondition(sparse=True)),
+    ('diasbp_max_lst_sd', ContinuousCondition(sparse=True)),
+    ('diasbp_mean_lst_sd', ContinuousCondition(sparse=True)),
+    ('meanbp_min_lst_sd', ContinuousCondition(sparse=True)),
+    ('meanbp_max_lst_sd', ContinuousCondition(sparse=True)),
+    ('meanbp_mean_lst_sd', ContinuousCondition(sparse=True)),
+    ('resprate_min_lst_sd', ContinuousCondition(sparse=True)),
+    ('resprate_max_lst_sd', ContinuousCondition(sparse=True)),
+    ('resprate_mean_lst_sd', ContinuousCondition(sparse=True)),
+    ('tempc_min_lst_sd', ContinuousCondition(sparse=True)),
+    ('tempc_max_lst_sd', ContinuousCondition(sparse=True)),
+    ('tempc_mean_lst_sd', ContinuousCondition(sparse=True)),
+    ('spo2_min_lst_sd', ContinuousCondition(sparse=True)),
+    ('spo2_max_lst_sd', ContinuousCondition(sparse=True)),
+    ('spo2_mean_lst_sd', ContinuousCondition(sparse=True)),
+    ('glucose_min_lst_sd', ContinuousCondition(sparse=True)),
+    ('glucose_max_lst_sd', ContinuousCondition(sparse=True)),
+    ('glucose_mean_lst_sd', ContinuousCondition(sparse=True)),
+    ('los_icu_lst_delta', ContinuousCondition(sparse=True)),
+    ('heartrate_min_lst_delta', ContinuousCondition(sparse=True)),
+    ('heartrate_max_lst_delta', ContinuousCondition(sparse=True)),
+    ('heartrate_mean_lst_delta', ContinuousCondition(sparse=True)),
+    ('sysbp_min_lst_delta', ContinuousCondition(sparse=True)),
+    ('sysbp_max_lst_delta', ContinuousCondition(sparse=True)),
+    ('sysbp_mean_lst_delta', ContinuousCondition(sparse=True)),
+    ('diasbp_min_lst_delta', ContinuousCondition(sparse=True)),
+    ('diasbp_max_lst_delta', ContinuousCondition(sparse=True)),
+    ('diasbp_mean_lst_delta', ContinuousCondition(sparse=True)),
+    ('meanbp_min_lst_delta', ContinuousCondition(sparse=True)),
+    ('meanbp_max_lst_delta', ContinuousCondition(sparse=True)),
+    ('meanbp_mean_lst_delta', ContinuousCondition(sparse=True)),
+    ('resprate_min_lst_delta', ContinuousCondition(sparse=True)),
+    ('resprate_max_lst_delta', ContinuousCondition(sparse=True)),
+    ('resprate_mean_lst_delta', ContinuousCondition(sparse=True)),
+    ('tempc_min_lst_delta', ContinuousCondition(sparse=True)),
+    ('tempc_max_lst_delta', ContinuousCondition(sparse=True)),
+    ('tempc_mean_lst_delta', ContinuousCondition(sparse=True)),
+    ('spo2_min_lst_delta', ContinuousCondition(sparse=True)),
+    ('spo2_max_lst_delta', ContinuousCondition(sparse=True)),
+    ('spo2_mean_lst_delta', ContinuousCondition(sparse=True)),
+    ('glucose_min_lst_delta', ContinuousCondition(sparse=True)),
+    ('glucose_max_lst_delta', ContinuousCondition(sparse=True)),
+    ('glucose_mean_lst_delta', ContinuousCondition(sparse=True)),
+    ('los_icu_lst_min', ContinuousCondition(sparse=True)),
+    ('heartrate_min_lst_min', ContinuousCondition(sparse=True)),
+    ('heartrate_max_lst_min', ContinuousCondition(sparse=True)),
+    ('heartrate_mean_lst_min', ContinuousCondition(sparse=True)),
+    ('sysbp_min_lst_min', ContinuousCondition(sparse=True)),
+    ('sysbp_max_lst_min', ContinuousCondition(sparse=True)),
+    ('sysbp_mean_lst_min', ContinuousCondition(sparse=True)),
+    ('diasbp_min_lst_min', ContinuousCondition(sparse=True)),
+    ('diasbp_max_lst_min', ContinuousCondition(sparse=True)),
+    ('diasbp_mean_lst_min', ContinuousCondition(sparse=True)),
+    ('meanbp_min_lst_min', ContinuousCondition(sparse=True)),
+    ('meanbp_max_lst_min', ContinuousCondition(sparse=True)),
+    ('meanbp_mean_lst_min', ContinuousCondition(sparse=True)),
+    ('resprate_min_lst_min', ContinuousCondition(sparse=True)),
+    ('resprate_max_lst_min', ContinuousCondition(sparse=True)),
+    ('resprate_mean_lst_min', ContinuousCondition(sparse=True)),
+    ('tempc_min_lst_min', ContinuousCondition(sparse=True)),
+    ('tempc_max_lst_min', ContinuousCondition(sparse=True)),
+    ('tempc_mean_lst_min', ContinuousCondition(sparse=True)),
+    ('spo2_min_lst_min', ContinuousCondition(sparse=True)),
+    ('spo2_max_lst_min', ContinuousCondition(sparse=True)),
+    ('spo2_mean_lst_min', ContinuousCondition(sparse=True)),
+    ('glucose_min_lst_min', ContinuousCondition(sparse=True)),
+    ('glucose_max_lst_min', ContinuousCondition(sparse=True)),
+    ('glucose_mean_lst_min', ContinuousCondition(sparse=True)),
+    ('los_icu_lst_max', ContinuousCondition(sparse=True)),
+    ('heartrate_min_lst_max', ContinuousCondition(sparse=True)),
+    ('heartrate_max_lst_max', ContinuousCondition(sparse=True)),
+    ('heartrate_mean_lst_max', ContinuousCondition(sparse=True)),
+    ('sysbp_min_lst_max', ContinuousCondition(sparse=True)),
+    ('sysbp_max_lst_max', ContinuousCondition(sparse=True)),
+    ('sysbp_mean_lst_max', ContinuousCondition(sparse=True)),
+    ('diasbp_min_lst_max', ContinuousCondition(sparse=True)),
+    ('diasbp_max_lst_max', ContinuousCondition(sparse=True)),
+    ('diasbp_mean_lst_max', ContinuousCondition(sparse=True)),
+    ('meanbp_min_lst_max', ContinuousCondition(sparse=True)),
+    ('meanbp_max_lst_max', ContinuousCondition(sparse=True)),
+    ('meanbp_mean_lst_max', ContinuousCondition(sparse=True)),
+    ('resprate_min_lst_max', ContinuousCondition(sparse=True)),
+    ('resprate_max_lst_max', ContinuousCondition(sparse=True)),
+    ('resprate_mean_lst_max', ContinuousCondition(sparse=True)),
+    ('tempc_min_lst_max', ContinuousCondition(sparse=True)),
+    ('tempc_max_lst_max', ContinuousCondition(sparse=True)),
+    ('tempc_mean_lst_max', ContinuousCondition(sparse=True)),
+    ('spo2_min_lst_max', ContinuousCondition(sparse=True)),
+    ('spo2_max_lst_max', ContinuousCondition(sparse=True)),
+    ('spo2_mean_lst_max', ContinuousCondition(sparse=True)),
+    ('glucose_min_lst_max', ContinuousCondition(sparse=True)),
+    ('glucose_max_lst_max', ContinuousCondition(sparse=True)),
+    ('glucose_mean_lst_max', ContinuousCondition(sparse=True)),
+    ('heartrate_min_lst_mm', ContinuousCondition(sparse=True)),
+    ('heartrate_max_lst_mm', ContinuousCondition(sparse=True)),
+    ('heartrate_mean_lst_mm', ContinuousCondition(sparse=True)),
+    ('sysbp_min_lst_mm', ContinuousCondition(sparse=True)),
+    ('sysbp_max_lst_mm', ContinuousCondition(sparse=True)),
+    ('sysbp_mean_lst_mm', ContinuousCondition(sparse=True)),
+    ('diasbp_min_lst_mm', ContinuousCondition(sparse=True)),
+    ('diasbp_max_lst_mm', ContinuousCondition(sparse=True)),
+    ('diasbp_mean_lst_mm', ContinuousCondition(sparse=True)),
+    ('meanbp_min_lst_mm', ContinuousCondition(sparse=True)),
+    ('meanbp_max_lst_mm', ContinuousCondition(sparse=True)),
+    ('meanbp_mean_lst_mm', ContinuousCondition(sparse=True)),
+    ('resprate_min_lst_mm', ContinuousCondition(sparse=True)),
+    ('resprate_max_lst_mm', ContinuousCondition(sparse=True)),
+    ('resprate_mean_lst_mm', ContinuousCondition(sparse=True)),
+    ('tempc_min_lst_mm', ContinuousCondition(sparse=True)),
+    ('tempc_max_lst_mm', ContinuousCondition(sparse=True)),
+    ('tempc_mean_lst_mm', ContinuousCondition(sparse=True)),
+    ('spo2_min_lst_mm', ContinuousCondition(sparse=True)),
+    ('spo2_max_lst_mm', ContinuousCondition(sparse=True)),
+    ('spo2_mean_lst_mm', ContinuousCondition(sparse=True)),
+    ('glucose_min_lst_mm', ContinuousCondition(sparse=True)),
+    ('glucose_max_lst_mm', ContinuousCondition(sparse=True)),
+    ('glucose_mean_lst_mm', ContinuousCondition(sparse=True))
+    # 'los_icu_lst'
+    # 'heartrate_min_lst'
+    # 'heartrate_max_lst'
+    # 'heartrate_mean_lst'
+    # 'sysbp_min_lst'
+    # 'sysbp_max_lst'
+    # 'sysbp_mean_lst'
+    # 'diasbp_min_lst'
+    # 'diasbp_max_lst'
+    # 'diasbp_mean_lst'
+    # 'meanbp_min_lst'
+    # 'meanbp_max_lst'
+    # 'meanbp_mean_lst'
+    # 'resprate_min_lst'
+    # 'resprate_max_lst'
+    # 'resprate_mean_lst'
+    # 'tempc_min_lst'
+    # 'tempc_max_lst'
+    # 'tempc_mean_lst'
+    # 'spo2_min_lst'
+    # 'spo2_max_lst'
+    # 'spo2_mean_lst'
+    # 'glucose_min_lst'
+    # 'glucose_max_lst'
+    # 'glucose_mean_lst'
+])
+
+CONDITIONS_WITH_TEXT = ConditionList([
+    ('ICD9_defs_txt', PretrainedWordEmbeddingCondition(VECTORS)),
     ('gender', CategoricalCondition(embedding_dim=3, sparse=True, embedding_on_gpu=True)),
     ('ethnicity_grouped', CategoricalCondition(embedding_dim=7,  sparse=True, embedding_on_gpu=True)),
     ('admission_type', CategoricalCondition(embedding_dim=5, sparse=True, embedding_on_gpu=True)),
@@ -308,20 +479,28 @@ MODELS_WITH_HYPERPARAMS = [
      # # dropout=(.2,.2),
      # conditions=None,
                                              {'lr': [0.001, 0.005, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-                                              'n_code': [50],
-                                              'n_epochs': [50],
-                                              'batch_size': [50],
-                                              'n_hidden': [50],
+                                              'n_code': [50, 100],
+                                              'n_epochs': [50, 100],
+                                              'batch_size': [50, 100],
+                                              'n_hidden': [50, 100],
                                               'normalize_inputs': [True]
                                               } ),
     (VAERecommender(conditions=CONDITIONS, **vae_params),
                                          {'lr': [0.001, 0.005, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-                                          'n_code': [50],
-                                          'n_epochs': [50],
-                                          'batch_size': [50],
-                                          'n_hidden': [50],
+                                          'n_code': [50, 100],
+                                          'n_epochs': [50, 100],
+                                          'batch_size': [50, 100],
+                                          'n_hidden': [50, 1100],
                                           'normalize_inputs': [True]
                                           }),
+    (VAERecommender(conditions=CONDITIONS_WITH_TEXT, **vae_params),
+     {'lr': [0.001, 0.005, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+      'n_code': [50, 100],
+      'n_epochs': [50, 100],
+      'batch_size': [50, 100],
+      'n_hidden': [50, 1100],
+      'normalize_inputs': [True]
+      }),
     (DAERecommender(conditions=None, **ae_params),
 #                  optimizer='adam',
 #                  activation='ReLU',
@@ -330,50 +509,73 @@ MODELS_WITH_HYPERPARAMS = [
 #                  corrupt='zeros',
 #                  conditions=None,
                                             {'lr': [0.001, 0.005, 0.01], #[0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-                                             'n_code': [50],
-                                             'n_epochs': [30],
-                                             'batch_size': [50],
-                                             'n_hidden': [50],
+                                             'n_code': [50, 100],
+                                             'n_epochs': [50, 100],
+                                             'batch_size': [50, 100],
+                                             'n_hidden': [50, 100],
                                              'normalize_inputs': [True] } ),
     (DAERecommender(conditions=CONDITIONS, **ae_params),
                                             {'lr': [0.001, 0.005, 0.01], #[0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-                                             'n_code': [50],
-                                             'n_epochs': [30],
-                                             'batch_size': [50],
-                                             'n_hidden': [50],
+                                             'n_code': [50, 100],
+                                             'n_epochs': [50, 100],
+                                             'batch_size': [50, 100],
+                                             'n_hidden': [50, 100],
                                              'normalize_inputs': [True] }),
+    (DAERecommender(conditions=CONDITIONS_WITH_TEXT, **ae_params),
+     {'lr': [0.001, 0.005, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+      'n_code': [50, 100],
+      'n_epochs': [50, 100],
+      'batch_size': [50, 100],
+      'n_hidden': [50, 100],
+      'normalize_inputs': [True]}),
     (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=None, **ae_params),
                                              {'lr': [0.005, 0.001, 0.01],
-                                              'n_code': [50],
-                                              'n_epochs': [30],
-                                              'batch_size': [50],
-                                              'n_hidden': [50],
+                                              'n_code': [50, 100],
+                                              'n_epochs': [50, 100],
+                                              'batch_size': [50, 100],
+                                              'n_hidden': [50, 100],
                                               'normalize_inputs': [True]  },),
     (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS, **ae_params),
                                              {'lr': [0.005, 0.001, 0.01],
-                                              'n_code': [50],
-                                              'n_epochs': [30],
-                                              'batch_size': [50],
-                                              'n_hidden': [50],
+                                              'n_code': [50,100],
+                                              'n_epochs': [50, 100],
+                                              'batch_size': [50, 100],
+                                              'n_hidden': [50, 100],
                                               'normalize_inputs': [True]  },),
+    (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS_WITH_TEXT, **ae_params),
+     {'lr': [0.005, 0.001, 0.01],
+      'n_code': [50, 100],
+      'n_epochs': [50, 100],
+      'batch_size': [50, 100],
+      'n_hidden': [50, 100],
+      'normalize_inputs': [True]},),
     (AAERecommender(adversarial=True, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=None, **ae_params),
                                              {'prior': ['gauss'],
                                               'gen_lr': [0.001, 0.005, 0.01],
                                               'reg_lr': [0.001],
-                                              'n_code': [50],
-                                              'n_epochs': [30],
-                                              'batch_size': [50],
-                                              'n_hidden': [50],
+                                              'n_code': [50, 100],
+                                              'n_epochs': [50, 100],
+                                              'batch_size': [50, 100],
+                                              'n_hidden': [50, 100],
                                               'normalize_inputs': [True] },),
     (AAERecommender(adversarial=True, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS, **ae_params),
                                             {'prior': ['gauss'],
                                              'gen_lr': [0.001, 0.005, 0.01],
                                              'reg_lr': [0.001],
-                                             'n_code': [50],
-                                             'n_epochs': [30],
-                                             'batch_size': [50],
-                                             'n_hidden': [50],
+                                             'n_code': [50, 100],
+                                             'n_epochs': [50, 100],
+                                             'batch_size': [50, 100],
+                                             'n_hidden': [50, 100],
                                              'normalize_inputs': [True] },),
+    (AAERecommender(adversarial=True, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS_WITH_TEXT, **ae_params),
+     {'prior': ['gauss'],
+      'gen_lr': [0.001, 0.005, 0.01],
+      'reg_lr': [0.001],
+      'n_code': [50, 100],
+      'n_epochs': [50, 100],
+      'batch_size': [50, 100],
+      'n_hidden': [50, 100],
+      'normalize_inputs': [True]},),
     # AAERecommender(adversarial=False, conditions=CONDITIONS, lr=0.001, **ae_params),
 
     # DecodingRecommender(conditions=CONDITIONS, n_epochs=100, batch_size=100,
@@ -513,11 +715,9 @@ def unpack_patients(patients, icd_code_defs = None):
                 continue
             other_attributes[c_var][c_hadm_id] = patient[c_var]
         c_icd_codes = other_attributes['icd9_code_lst'][c_hadm_id]
-        c_code_defs = [d_icd_code_defs[x] if x in d_icd_code_defs.keys() else '' for x in c_icd_codes]
-        other_attributes['ICD9_defs_txt'][c_hadm_id] = '. '.join(c_code_defs)
-        # icd_code_defs
+        c_code_defs = [re.sub(r'[^\w\s]', '', d_icd_code_defs[x].lower()) if x in d_icd_code_defs.keys() else '' for x in c_icd_codes]
+        other_attributes['ICD9_defs_txt'][c_hadm_id] = ' '.join(c_code_defs)
     # bag_of_codes and ids should have corresponding indices
-
     return bags_of_codes, ids, other_attributes, d_icd_code_defs
 
 
@@ -570,7 +770,6 @@ def hyperparam_optimize(model, train_set, val_set, tunning_params= {'prior': ['g
             model = copy.deepcopy(model_cpy)
             model.model_params = c_row.to_dict()
             # THE GOLD (put into sparse matrix)
-
             model.train(train_set)
             # Prediction
             y_pred = model.predict(val_set)
@@ -607,6 +806,9 @@ def main(min_count = 50, drop = 0.5, n_folds = 5, outfile = 'out.log'):
     del patients
     bags = Bags(bags_of_patients, ids, side_info)  # with conditions
     log("Whole dataset:", logfile=outfile)
+
+    all_ages = list(side_info['age'].values())
+
     log(bags, logfile=outfile)
     all_codes = [c for c_list in list(side_info['icd9_code_lst'].values()) for c in c_list]
     t_codes = pd.value_counts(all_codes)
