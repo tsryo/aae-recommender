@@ -26,6 +26,7 @@ from matplotlib import pyplot as plt
 import itertools as it
 import pandas as pd
 import copy
+# import os, psutil
 from CONSTANTS import *
 
 # Set it to the Reuters RCV dataset
@@ -765,9 +766,14 @@ def hyperparam_optimize(model, train_set, val_set, tunning_params= {'prior': ['g
         y_val = lists2sparse(y_val, val_set.size(1)).tocsr(copy=False)
         # the known items in the test set, just to not recompute
         x_val = lists2sparse(val_set.data, val_set.size(1)).tocsr(copy=False)
-        model_cpy = copy.deepcopy(model)
+        # model_cpy = copy.deepcopy(model)
+        # process = psutil.Process(os.getpid())
+        # print("MEMORY USAGE: {}".format(process.memory_info().rss))
+
+
+        model.zero_grad() # see if we can skip deepcopy and just use zero_grad instead ?
         for c_idx, c_row in exp_grid_df.iterrows():
-            model = copy.deepcopy(model_cpy)
+            # model = copy.deepcopy(model_cpy)
             model.model_params = c_row.to_dict()
             # THE GOLD (put into sparse matrix)
             model.train(train_set)
