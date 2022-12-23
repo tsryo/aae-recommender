@@ -34,9 +34,7 @@ DEBUG_LIMIT = None
 # These need to be implemented in evaluation.py
 METRICS = ['mrr', 'mrr@5', 'mrr@10', 'map', 'map@5', 'map@10', 'f1_old', 'f1', 'f1@5', 'f1@10', 'maf1', 'maf1@5', 'maf1@10']
 
-W2V_IS_BINARY = True
 VECTORS = []
-LOAD_EMBEDDINGS = True
 if LOAD_EMBEDDINGS:
     print("Loading pre-trained embedding", W2V_PATH)
     VECTORS = KeyedVectors.load_word2vec_format(W2V_PATH, binary=W2V_IS_BINARY)
@@ -262,7 +260,6 @@ CONDITIONS = ConditionList([
     # 'glucose_max_lst'
     # 'glucose_mean_lst'
 ])
-
 CONDITIONS_WITH_TEXT = ConditionList([
     ('ICD9_defs_txt', PretrainedWordEmbeddingCondition(VECTORS)),
     ('gender', CategoricalCondition(embedding_dim=3, sparse=True, embedding_on_gpu=True)),
@@ -462,7 +459,6 @@ CONDITIONS_WITH_TEXT = ConditionList([
     # 'glucose_max_lst'
     # 'glucose_mean_lst'
 ])
-
 # Models without/with metadata
 MODELS_WITH_HYPERPARAMS = [
     # Use no metadata (only item sets)
@@ -766,14 +762,18 @@ def hyperparam_optimize(model, train_set, val_set, tunning_params= {'prior': ['g
         y_val = lists2sparse(y_val, val_set.size(1)).tocsr(copy=False)
         # the known items in the test set, just to not recompute
         x_val = lists2sparse(val_set.data, val_set.size(1)).tocsr(copy=False)
-        # model_cpy = copy.deepcopy(model)
+
         # process = psutil.Process(os.getpid())
         # print("MEMORY USAGE: {}".format(process.memory_info().rss))
-
-
-        model.zero_grad() # see if we can skip deepcopy and just use zero_grad instead ?
+        model_cpy = None
+        if not hasattr(model, 'zero_grad'):
+            model_cpy = copy.deepcopy(model)
         for c_idx, c_row in exp_grid_df.iterrows():
-            # model = copy.deepcopy(model_cpy)
+            if hasattr(model, 'zero_grad'):
+                model.zero_grad()  # see if we can skip deepcopy and just use zero_grad instead ?
+            else:
+                model = copy.deepcopy(model_cpy)
+
             model.model_params = c_row.to_dict()
             # THE GOLD (put into sparse matrix)
             model.train(train_set)
@@ -926,11 +926,19 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile):
         y_test = lists2sparse(y_test, test_set.size(1)).tocsr(copy=False)
         # the known items in the test set, just to not recompute
         x_test = lists2sparse(test_set.data, test_set.size(1)).tocsr(copy=False)
+        model_cpy = None
+        if not hasattr(model, 'zero_grad'):
+            model_cpy = copy.deepcopy(model)
         for model, hyperparams_to_try in MODELS_WITH_HYPERPARAMS:
             log('=' * 78, logfile=outfile)
             log(model, logfile=outfile)
             log("training model \n TIME: {}  ".format(datetime.now().strftime("%Y-%m-%d-%H:%M")), logfile=outfile)
-            model_cpy = copy.deepcopy(model)
+
+            if not hasattr(model, 'zero_grad'):
+                model = copy.deepcopy(model_cpy)
+            else:
+                model.zero_grad()  # see if we can skip deepcopy and just use zero_grad instead ?
+
             if hyperparams_to_try is not None and c_fold == 0: # for time constraints, just run hyperparams once
                 log('Optimizing on following hyper params: ', logfile=outfile)
                 log(hyperparams_to_try, logfile=outfile)
