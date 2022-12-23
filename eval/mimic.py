@@ -927,18 +927,17 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile):
         # the known items in the test set, just to not recompute
         x_test = lists2sparse(test_set.data, test_set.size(1)).tocsr(copy=False)
         model_cpy = None
-        if not hasattr(model, 'zero_grad'):
-            model_cpy = copy.deepcopy(model)
+
         for model, hyperparams_to_try in MODELS_WITH_HYPERPARAMS:
+            if model_cpy is None and not hasattr(model, 'zero_grad'):
+                model_cpy = copy.deepcopy(model)
             log('=' * 78, logfile=outfile)
             log(model, logfile=outfile)
             log("training model \n TIME: {}  ".format(datetime.now().strftime("%Y-%m-%d-%H:%M")), logfile=outfile)
-
-            if not hasattr(model, 'zero_grad'):
-                model = copy.deepcopy(model_cpy)
-            else:
-                model.zero_grad()  # see if we can skip deepcopy and just use zero_grad instead ?
-
+            # if not hasattr(model, 'zero_grad'):
+            #     model = copy.deepcopy(model_cpy)
+            # else:
+            #     model.zero_grad()  # see if we can skip deepcopy and just use zero_grad instead ?
             if hyperparams_to_try is not None and c_fold == 0: # for time constraints, just run hyperparams once
                 log('Optimizing on following hyper params: ', logfile=outfile)
                 log(hyperparams_to_try, logfile=outfile)
