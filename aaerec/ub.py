@@ -78,6 +78,7 @@ class GensimEmbeddedVectorizer(EmbeddedVectorizer):
         """
         index2word = gensim_vectors.index_to_key
         embedding = gensim_vectors.vectors
+        self.gensim_vectors = gensim_vectors
         super(GensimEmbeddedVectorizer, self).__init__(embedding,
                                                        index2word,
                                                        **kwargs)

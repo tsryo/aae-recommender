@@ -142,7 +142,7 @@ class VAE(nn.Module):
         KLD_element = mu.pow(2).add_(logvar.exp()).mul_(-1).add_(1).add_(logvar)
         KLD = torch.sum(KLD_element).mul_(-0.5)
 
-        return BCE + KLD
+        return np.nan_to_num(BCE) + np.nan_to_num(KLD)
 
     def partial_fit(self, X, y=None, condition_data=None):
         """

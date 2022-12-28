@@ -32,7 +32,7 @@ from CONSTANTS import *
 # Set it to the Reuters RCV dataset
 DEBUG_LIMIT = None
 # These need to be implemented in evaluation.py
-METRICS = ['mrr', 'mrr@5', 'mrr@10', 'map', 'map@5', 'map@10', 'f1_old', 'f1', 'f1@5', 'f1@10', 'maf1', 'maf1@5', 'maf1@10']
+METRICS = ['mrr', 'mrr@5', 'mrr@10', 'map', 'map@5', 'map@10', 'f1', 'f1@5', 'f1@10', 'maf1', 'maf1@5', 'maf1@10']
 
 VECTORS = []
 if LOAD_EMBEDDINGS:
