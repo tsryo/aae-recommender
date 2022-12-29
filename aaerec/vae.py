@@ -265,6 +265,16 @@ class VAE(nn.Module):
             print('====> Test set loss: {:.4f}'.format(test_loss))
 
         return np.vstack(pred)
+    def reset_parameters(self):
+        if self is not None:
+            attrs_to_call = [getattr(self, attr) for attr in dir(self) if not attr.startswith("__") and
+                             hasattr(getattr(self, attr), 'reset_parameters')]
+            for attr in attrs_to_call:
+                attr.reset_parameters()
+                attr.zero_grad()
+
+        if self.optimizer is not None:
+            self.optimizer = torch.optim.Adam(self.parameters(), self.optimizer.param_groups[0]['lr'])
 
 
 class VAERecommender(Recommender):
@@ -342,6 +352,17 @@ class VAERecommender(Recommender):
         pred = self.model.predict(X, condition_data=condition_data)
 
         return pred
+
+    def zero_grad(self):
+        """ Zeros gradients of all NN modules """
+        if self.model is not None:
+            self.model.zero_grad()
+    def reset_parameters(self):
+        if self.model is not None:
+            self.model.reset_parameters()
+            self.model.zero_grad()
+        if self.conditions is not None:
+            self.conditions.reset_parameters()
 
 
 def main():

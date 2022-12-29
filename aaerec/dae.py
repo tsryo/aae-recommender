@@ -314,6 +314,17 @@ class DenoisingAutoEncoder():
                 pred.append(X_reconstuction)
         return np.vstack(pred)
 
+    def reset_parameters(self):
+        if self is not None:
+            attrs_to_call = [getattr(self, attr) for attr in dir(self) if not attr.startswith("__") and
+                             hasattr(getattr(self, attr), 'reset_parameters')]
+            for attr in attrs_to_call:
+                attr.reset_parameters()
+                attr.zero_grad()
+
+        if self.optimizer is not None:
+            self.optimizer = torch.optim.Adam(self.parameters(), self.optimizer.param_groups[0]['lr'])
+
 
 class DAERecommender(Recommender):
     """
@@ -380,7 +391,11 @@ class DAERecommender(Recommender):
         pred = self.dae.predict(X, condition_data=condition_data)
 
         return pred
-
+    def reset_parameters(self):
+        if self.dae is not None:
+            self.dae.reset_parameters()
+        if self.conditions is not None:
+            self.conditions.reset_parameters()
 
 def main():
     """ Evaluates the DAE Recommender """

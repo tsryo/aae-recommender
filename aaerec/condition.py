@@ -137,6 +137,10 @@ class ConditionList(OrderedDict):
             if hasattr(condition, 'eval'):
                 condition.eval()
 
+    def reset_parameters(self):
+        for condition in self.values():
+            condition.reset_parameters()
+
     def __deepcopy__(self, memo): # memo is a dict of id's to copies
         id_self = id(self)        # memoization avoids unnecesary recursion
         _copy = memo.get(id_self)
@@ -243,7 +247,18 @@ class ConditionBase(ABC):
         return self
     ################################################
 
+    def reset_parameters(self):
+        if self is not None:
+            attrs_to_call = [getattr(self, attr) for attr in dir(self) if not attr.startswith("__") and
+                             hasattr(getattr(self, attr), 'reset_parameters')]
+            for attr in attrs_to_call:
+                attr.reset_parameters()
 
+        if self.optimizer is not None:
+            if hasattr(self, "embedding"):
+                self.optimizer = torch.optim.SparseAdam(self.embedding.parameters(), self.optimizer.param_groups[0]['lr'])
+            else:
+                self.optimizer = torch.optim.Adam(self.parameters(), self.optimizer.param_groups[0]['lr'])
     @classmethod
     def __subclasshook__(cls, C):
         if cls is ConditionBase:

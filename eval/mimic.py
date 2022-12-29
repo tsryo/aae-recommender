@@ -766,11 +766,11 @@ def hyperparam_optimize(model, train_set, val_set, tunning_params= {'prior': ['g
         # process = psutil.Process(os.getpid())
         # print("MEMORY USAGE: {}".format(process.memory_info().rss))
         model_cpy = None
-        if not hasattr(model, 'zero_grad'):
+        if not hasattr(model, 'reset_parameters'):
             model_cpy = copy.deepcopy(model)
         for c_idx, c_row in exp_grid_df.iterrows():
-            if hasattr(model, 'zero_grad'):
-                model.zero_grad()  # see if we can skip deepcopy and just use zero_grad instead ?
+            if hasattr(model, 'reset_parameters'):
+                model.reset_parameters() # see if we can skip deepcopy and just use zero_grad instead ?
             else:
                 model = copy.deepcopy(model_cpy)
 
@@ -929,7 +929,7 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile):
         model_cpy = None
 
         for model, hyperparams_to_try in MODELS_WITH_HYPERPARAMS:
-            if model_cpy is None and not hasattr(model, 'zero_grad'):
+            if model_cpy is None and not hasattr(model, 'reset_parameters'):
                 model_cpy = copy.deepcopy(model)
             log('=' * 78, logfile=outfile)
             log(model, logfile=outfile)
@@ -948,6 +948,8 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile):
                 log(best_params, logfile=outfile)
                 model.model_params = best_params
             # Training
+            if hasattr(model, 'reset_parameters'):
+                model.reset_parameters()
             model.train(train_set)
             # Prediction
             y_pred = model.predict(test_set)

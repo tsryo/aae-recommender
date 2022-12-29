@@ -447,6 +447,22 @@ class AutoEncoder():
                 pred.append(X_reconstuction)
         return np.vstack(pred)
 
+    def zero_grad(self):
+        """ Zeros gradients of all NN modules """
+        self.enc.zero_grad()
+        self.dec.zero_grad()
+
+    def reset_parameters(self):
+        if self is not None:
+            attrs_to_call = [getattr(self, attr) for attr in dir(self) if not attr.startswith("__") and
+                             hasattr(getattr(self, attr), 'reset_parameters')]
+            for attr in attrs_to_call:
+                attr.reset_parameters()
+                attr.zero_grad()
+
+        if self.optimizer is not None:
+            self.optimizer = torch.optim.Adam(self.parameters(), self.optimizer.param_groups[0]['lr'])
+
 
 class DecodingRecommender(Recommender):
     """ Only the decoder part of the AAE, basically 2-MLP """
@@ -659,6 +675,16 @@ class AdversarialAutoEncoder(AutoEncoderMixin):
         self.dec.zero_grad()
         self.disc.zero_grad()
 
+    def reset_parameters(self):
+        if self is not None:
+            attrs_to_call = [getattr(self, attr) for attr in dir(self) if not attr.startswith("__") and
+                             hasattr(getattr(self, attr), 'reset_parameters')]
+            for attr in attrs_to_call:
+                attr.reset_parameters()
+
+        if self.optimizer is not None:
+            self.optimizer = torch.optim.Adam(self.parameters(), self.optimizer.param_groups[0]['lr'])
+
     def ae_step(self, batch, condition_data=None):
         ### DONE Adapt to generic condition ###
         """
@@ -681,6 +707,7 @@ class AdversarialAutoEncoder(AutoEncoderMixin):
         recon_loss = F.binary_cross_entropy(x_sample + TINY,
                                             batch.view(batch.size(0),
                                                        batch.size(1)) + TINY)
+
         # Clear all related gradients
         self.enc.zero_grad()
         self.dec.zero_grad()
@@ -967,8 +994,14 @@ class AAERecommender(Recommender):
         pred = self.model.predict(X, condition_data=condition_data)
 
         return pred
-
-
+    def zero_grad(self):
+        """ Zeros gradients of all NN modules """
+        self.model.zero_grad()
+    def reset_parameters(self):
+        if self.model is not None:
+            self.model.reset_parameters()
+        if self.conditions is not None:
+            self.conditions.reset_parameters()
 def main():
     """ Evaluates the AAE Recommender """
     CONFIG = {
