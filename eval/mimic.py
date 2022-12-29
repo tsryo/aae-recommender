@@ -941,7 +941,7 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile):
             if hyperparams_to_try is not None and c_fold == 0: # for time constraints, just run hyperparams once
                 log('Optimizing on following hyper params: ', logfile=outfile)
                 log(hyperparams_to_try, logfile=outfile)
-                best_params, _, _ = hyperparam_optimize(model_cpy, train_set, val_set,
+                best_params, _, _ = hyperparam_optimize(model, train_set, val_set,
                                                         tunning_params=hyperparams_to_try,
                                                         drop=drop)
                 log('After hyperparam_optimize, best params: ', logfile=outfile)
