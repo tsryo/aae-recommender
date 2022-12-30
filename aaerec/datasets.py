@@ -100,7 +100,12 @@ def split_set(s, criterion):
         todrop = {e for e in s if criterion(e)}
     elif type(criterion) == float:
         assert criterion > 0 and criterion < 1, "Float not bounded in (0,1)"
-        todrop = {e for e in s if random.random() < criterion}
+        n_elems_to_drop = len(s)*criterion
+        remainder = n_elems_to_drop - np.floor(n_elems_to_drop)
+        should_round_up = random.random() >= 1-remainder
+        n_elems_to_drop = np.ceil(n_elems_to_drop) if should_round_up else np.floor(n_elems_to_drop)
+        todrop = random.sample(s, int(n_elems_to_drop))
+        # todrop = {e for e in s if random.random() < criterion}
     elif type(criterion) == int:
         try:
             todrop = random.sample(s, criterion)

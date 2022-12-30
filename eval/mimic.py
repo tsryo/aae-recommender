@@ -26,6 +26,7 @@ from matplotlib import pyplot as plt
 import itertools as it
 import pandas as pd
 import copy
+import gc
 # import os, psutil
 from CONSTANTS import *
 
@@ -713,7 +714,7 @@ def unpack_patients(patients, icd_code_defs = None):
             other_attributes[c_var][c_hadm_id] = patient[c_var]
         c_icd_codes = other_attributes['icd9_code_lst'][c_hadm_id]
         c_code_defs = [re.sub(r'[^\w\s]', '', d_icd_code_defs[x].lower()) if x in d_icd_code_defs.keys() else '' for x in c_icd_codes]
-        other_attributes['ICD9_defs_txt'][c_hadm_id] = ' '.join(c_code_defs)
+        other_attributes['ICD9_defs_txt'][c_hadm_id] = (' '.join(c_code_defs))[:3000] # limit to first 3000 characters
     # bag_of_codes and ids should have corresponding indices
     return bags_of_codes, ids, other_attributes, d_icd_code_defs
 
@@ -748,7 +749,7 @@ def plot_patient_hists(patients):
 def hyperparam_optimize(model, train_set, val_set, tunning_params= {'prior': ['gauss'], 'gen_lr': [0.001], 'reg_lr': [0.001],
                                                         'n_code': [10, 25, 50], 'n_epochs': [20, 50, 100],
                                                         'batch_size': [100], 'n_hidden': [100], 'normalize_inputs': [True]},
-                        metric = 'maf1', drop = 0.5):
+                        metric = 'maf1@10', drop = 0.5):
         noisy, y_val = corrupt_sets(val_set.data, drop=drop)
         val_set.data = noisy
 
@@ -769,6 +770,7 @@ def hyperparam_optimize(model, train_set, val_set, tunning_params= {'prior': ['g
         if not hasattr(model, 'reset_parameters'):
             model_cpy = copy.deepcopy(model)
         for c_idx, c_row in exp_grid_df.iterrows():
+            gc.collect()
             if hasattr(model, 'reset_parameters'):
                 model.reset_parameters() # see if we can skip deepcopy and just use zero_grad instead ?
             else:
@@ -941,7 +943,7 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile):
             if hyperparams_to_try is not None and c_fold == 0: # for time constraints, just run hyperparams once
                 log('Optimizing on following hyper params: ', logfile=outfile)
                 log(hyperparams_to_try, logfile=outfile)
-                best_params, _, _ = hyperparam_optimize(model, train_set, val_set,
+                best_params, _, _ = hyperparam_optimize(model, train_set, val_set.clone(),
                                                         tunning_params=hyperparams_to_try,
                                                         drop=drop)
                 log('After hyperparam_optimize, best params: ', logfile=outfile)
@@ -950,6 +952,7 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile):
             # Training
             if hasattr(model, 'reset_parameters'):
                 model.reset_parameters()
+            gc.collect()
             model.train(train_set)
             # Prediction
             y_pred = model.predict(test_set)
