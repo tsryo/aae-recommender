@@ -254,7 +254,7 @@ class ConditionBase(ABC):
             for attr in attrs_to_call:
                 attr.reset_parameters()
 
-        if self.optimizer is not None:
+        if hasattr(self, "optimizer") and self.optimizer is not None:
             if hasattr(self, "embedding"):
                 self.optimizer = torch.optim.SparseAdam(self.embedding.parameters(), self.optimizer.param_groups[0]['lr'])
             else:
