@@ -322,8 +322,6 @@ class DenoisingAutoEncoder():
                 attr.reset_parameters()
                 attr.zero_grad()
 
-        if self.optimizer is not None:
-            self.optimizer = torch.optim.Adam(self.parameters(), self.optimizer.param_groups[0]['lr'])
 
 
 class DAERecommender(Recommender):
