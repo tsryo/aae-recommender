@@ -998,9 +998,9 @@ class AAERecommender(Recommender):
         """ Zeros gradients of all NN modules """
         self.model.zero_grad()
     def reset_parameters(self):
-        if self.model is not None:
+        if hasattr(self, 'model') and self.model is not None:
             self.model.reset_parameters()
-        if self.conditions is not None:
+        if hasattr(self, 'conditions') and self.conditions is not None:
             self.conditions.reset_parameters()
 def main():
     """ Evaluates the AAE Recommender """

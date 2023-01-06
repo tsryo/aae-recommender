@@ -36,9 +36,7 @@ DEBUG_LIMIT = None
 METRICS = ['mrr', 'mrr@5', 'mrr@10', 'map', 'map@5', 'map@10', 'f1', 'f1@5', 'f1@10', 'maf1', 'maf1@5', 'maf1@10']
 
 VECTORS = []
-if LOAD_EMBEDDINGS:
-    print("Loading pre-trained embedding", W2V_PATH)
-    VECTORS = KeyedVectors.load_word2vec_format(W2V_PATH, binary=W2V_IS_BINARY)
+
 
 # Hyperparameters TODO adapt them
 ae_params = {
@@ -789,11 +787,7 @@ def hyperparam_optimize(model, train_set, val_set, tunning_params= {'prior': ['g
 
 def main(min_count = 50, drop = 0.5, n_folds = 5, model_idx = -1, outfile = 'out.log'):
     """ Main function for training and evaluating AAE methods on MIMIC data """
-    print('drop = {}; min_count = {}, n_folds = {}'.format(drop, min_count, n_folds))
-    # drop = 0.5
-    # min_count = 50
-    # n_folds = 5
-    # outfile = '../test-run_{}.log'.format(datetime.now().strftime("%Y-%m-%d-%H:%M"))
+    print('drop = {}; min_count = {}, n_folds = {}, model_idx = {}'.format(drop, min_count, n_folds, model_idx))
     print("Loading data from", DATA_PATH)
     patients = load(DATA_PATH)
     icd_code_defs = pd.read_csv(ICD_CODE_DEFS_PATH, sep = '\t')
@@ -979,7 +973,11 @@ if __name__ == '__main__':
                         help='Drop parameter', default=0.5)
     parser.add_argument('-nf', '--n_folds', type=int,
                         help='Number of folds', default=5)
-    parser.add_argument('-mi', '--model_idx', type=int, default=-1)
+    parser.add_argument('-mi', '--model_idx', type=int, help='Index of model to use',
+                        default=-1)
+    parser.add_argument('-le', '--load_embeddings', type=int, help='Load embeddings',
+                        default=0)
+
     args = parser.parse_args()
     print(args)
 
@@ -988,5 +986,8 @@ if __name__ == '__main__':
         drop = int(args.drop)
     except ValueError:
         drop = float(args.drop)
-
-    main(outfile=args.outfile, min_count=args.min_count, drop=args.drop, n_folds=args.n_folds)
+    LOAD_EMBEDDINGS = args.load_embeddings > 0
+    if LOAD_EMBEDDINGS:
+        print("Loading pre-trained embedding", W2V_PATH)
+        VECTORS = KeyedVectors.load_word2vec_format(W2V_PATH, binary=W2V_IS_BINARY)
+    main(outfile=args.outfile, min_count=args.min_count, drop=args.drop, n_folds=args.n_folds, model_idx=args.model_idx)
