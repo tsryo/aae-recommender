@@ -742,7 +742,7 @@ if __name__ == '__main__':
 
         # *** AEs
         (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=None, **ae_params),
-         {'lr': [0.005, 0.001, 0.01],
+         {'lr': [0.001, 0.01],
           'n_code': [50, 100],
           'n_epochs': [25, 50],
           'batch_size': [25, 50],
@@ -750,7 +750,7 @@ if __name__ == '__main__':
           'normalize_inputs': [True]},),
         (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS,
                         **ae_params),
-         {'lr': [0.005, 0.001, 0.01],
+         {'lr': [0.001, 0.01],
           'n_code': [50, 100],
           'n_epochs': [25, 50],
           'batch_size': [25, 50],
@@ -758,7 +758,7 @@ if __name__ == '__main__':
           'normalize_inputs': [True]},),
         (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS_WITH_TEXT,
                         **ae_params),
-         {'lr': [0.005, 0.001, 0.01],
+         {'lr': [0.001, 0.01],
           'n_code': [50, 100],
           'n_epochs': [25, 50],
           'batch_size': [25, 50],
