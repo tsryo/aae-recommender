@@ -462,70 +462,15 @@ CONDITIONS_WITH_TEXT = ConditionList([
 ])
 # Models without/with metadata
 MODELS_WITH_HYPERPARAMS = [
+    # *** BASELINES
     # Use no metadata (only item sets)
-    # ( Countbased(),
-    #                                         {"order": [1,2,3,4,5]}),
+    ( Countbased(),
+                                            {"order": [1,2,3,4,5]}),
     # Use title (as defined in CONDITIONS above)
-    # (SVDRecommender(10, use_title=False),
-    #  {"dims": [50, 100, 200, 500, 1000]}),
-    # (VAERecommender(conditions=None, **vae_params),
-    #  # n_epochs=500,
-    #  # optimizer='adam',
-    #  # normalize_inputs=True,
-    #  # activation='ReLU',
-    #  # final_activation='Sigmoid',
-    #  # # dropout=(.2,.2),
-    #  # conditions=None,
-    #                                          {'lr': [0.001, 0.005],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-    #                                           'n_code': [50, 100],
-    #                                           'n_epochs': [25, 50],
-    #                                           'batch_size': [25, 50],
-    #                                           'n_hidden': [25, 50],
-    #                                           'normalize_inputs': [True]
-    #                                           } ),
-    # (VAERecommender(conditions=CONDITIONS, **vae_params),
-    #                                      {'lr': [0.001, 0.005],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-    #                                       'n_code': [50, 100],
-    #                                       'n_epochs': [25, 50],
-    #                                       'batch_size': [25, 50],
-    #                                       'n_hidden': [50, 1100],
-    #                                       'normalize_inputs': [True]
-    #                                       }),
-    # (VAERecommender(conditions=CONDITIONS_WITH_TEXT, **vae_params),
-    #  {'lr': [0.001, 0.005],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-    #   'n_code': [50, 100],
-    #   'n_epochs': [25, 50],
-    #   'batch_size': [25, 50],
-    #   'n_hidden': [50, 1100],
-    #   'normalize_inputs': [True]
-    #   }),
-    (DAERecommender(conditions=None, **ae_params),
-#                  optimizer='adam',
-#                  activation='ReLU',
-#                  dropout=(.2, .2),
-#                  noise_factor=0.2,
-#                  corrupt='zeros',
-#                  conditions=None,
-                                            {'lr': [0.001, 0.005], #[0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-                                             'n_code': [50, 100],
-                                             'n_epochs': [25, 50],
-                                             'batch_size': [25, 50],
-                                             'n_hidden': [25, 50],
-                                             'normalize_inputs': [True] } ),
-    (DAERecommender(conditions=CONDITIONS, **ae_params),
-                                            {'lr': [0.001, 0.005], #[0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-                                             'n_code': [50, 100],
-                                             'n_epochs': [25, 50],
-                                             'batch_size': [25, 50],
-                                             'n_hidden': [25, 50],
-                                             'normalize_inputs': [True] }),
-    (DAERecommender(conditions=CONDITIONS_WITH_TEXT, **ae_params),
-     {'lr': [0.001, 0.005],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-      'n_code': [50, 100],
-      'n_epochs': [25, 50],
-      'batch_size': [25, 50],
-      'n_hidden': [25, 50],
-      'normalize_inputs': [True]}),
+    (SVDRecommender(10, use_title=False),
+     {"dims": [50, 100, 200, 500, 1000]}),
+
+    # *** AEs
     (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=None, **ae_params),
                                              {'lr': [0.005, 0.001, 0.01],
                                               'n_code': [50, 100],
@@ -541,15 +486,66 @@ MODELS_WITH_HYPERPARAMS = [
                                               'n_hidden': [25, 50],
                                               'normalize_inputs': [True]  },),
     (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS_WITH_TEXT, **ae_params),
-     {'lr': [0.005, 0.001, 0.01],
-      'n_code': [50, 100],
-      'n_epochs': [25, 50],
-      'batch_size': [25, 50],
-      'n_hidden': [25, 50],
-      'normalize_inputs': [True]},),
+                                             {'lr': [0.005, 0.001, 0.01],
+                                              'n_code': [50, 100],
+                                              'n_epochs': [25, 50],
+                                              'batch_size': [25, 50],
+                                              'n_hidden': [25, 50],
+                                              'normalize_inputs': [True]},),
+
+    # *** DAEs
+   (DAERecommender(conditions=None, **ae_params),
+                                            {'lr': [0.001, 0.01], #[0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+                                             'n_code': [50, 100],
+                                             'n_epochs': [25, 50],
+                                             'batch_size': [25, 50],
+                                             'n_hidden': [25, 50],
+                                             'normalize_inputs': [True] } ),
+    (DAERecommender(conditions=CONDITIONS, **ae_params),
+                                            {'lr': [0.001, 0.01], #[0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+                                             'n_code': [50, 100],
+                                             'n_epochs': [25, 50],
+                                             'batch_size': [25, 50],
+                                             'n_hidden': [25, 50],
+                                             'normalize_inputs': [True] }),
+    (DAERecommender(conditions=CONDITIONS_WITH_TEXT, **ae_params),
+                                             {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+                                              'n_code': [50, 100],
+                                              'n_epochs': [25, 50],
+                                              'batch_size': [25, 50],
+                                              'n_hidden': [25, 50],
+                                              'normalize_inputs': [True]}),
+
+    # *** VAEs
+    (VAERecommender(conditions=None, **vae_params),
+                                             {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+                                              'n_code': [50, 100],
+                                              'n_epochs': [25, 50],
+                                              'batch_size': [25, 50],
+                                              'n_hidden': [25, 50],
+                                              'normalize_inputs': [True]
+                                              } ),
+    (VAERecommender(conditions=CONDITIONS, **vae_params),
+                                             {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+                                              'n_code': [50, 100],
+                                              'n_epochs': [25, 50],
+                                              'batch_size': [25, 50],
+                                              'n_hidden': [50, 1100],
+                                              'normalize_inputs': [True]
+                                              }),
+    (VAERecommender(conditions=CONDITIONS_WITH_TEXT, **vae_params),
+                                             {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+                                              'n_code': [50, 100],
+                                              'n_epochs': [25, 50],
+                                              'batch_size': [25, 50],
+                                              'n_hidden': [50, 1100],
+                                              'normalize_inputs': [True]
+                                              }),
+
+    # *** AAEs
     (AAERecommender(adversarial=True, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=None, **ae_params),
                                              {'prior': ['gauss'],
-                                              'gen_lr': [0.001, 0.005, 0.01],
+                                              'gen_lr': [0.001, 0.01],
                                               'reg_lr': [0.001],
                                               'n_code': [50, 100],
                                               'n_epochs': [25, 50],
@@ -558,7 +554,7 @@ MODELS_WITH_HYPERPARAMS = [
                                               'normalize_inputs': [True] },),
     (AAERecommender(adversarial=True, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS, **ae_params),
                                             {'prior': ['gauss'],
-                                             'gen_lr': [0.001, 0.005, 0.01],
+                                             'gen_lr': [0.001, 0.01],
                                              'reg_lr': [0.001],
                                              'n_code': [50, 100],
                                              'n_epochs': [25, 50],
@@ -566,21 +562,14 @@ MODELS_WITH_HYPERPARAMS = [
                                              'n_hidden': [25, 50],
                                              'normalize_inputs': [True] },),
     (AAERecommender(adversarial=True, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS_WITH_TEXT, **ae_params),
-     {'prior': ['gauss'],
-      'gen_lr': [0.001, 0.005, 0.01],
-      'reg_lr': [0.001],
-      'n_code': [50, 100],
-      'n_epochs': [25, 50],
-      'batch_size': [25, 50],
-      'n_hidden': [25, 50],
-      'normalize_inputs': [True]},),
-    # AAERecommender(adversarial=False, conditions=CONDITIONS, lr=0.001, **ae_params),
-
-    # DecodingRecommender(conditions=CONDITIONS, n_epochs=100, batch_size=100,
-    #                     optimizer='adam', n_hidden=100, lr=0.001, verbose=True),
-    # VAERecommender(conditions=CONDITIONS, **vae_params),
-    # DAERecommender(conditions=CONDITIONS, **ae_params)
-    # Put more here...
+                                             {'prior': ['gauss'],
+                                              'gen_lr': [0.001, 0.01],
+                                              'reg_lr': [0.001],
+                                              'n_code': [50, 100],
+                                              'n_epochs': [25, 50],
+                                              'batch_size': [25, 50],
+                                              'n_hidden': [25, 50],
+                                              'normalize_inputs': [True]},),
 ]
 
 def prepare_evaluation(bags, test_size=0.1, n_items=None, min_count=None, drop=1):
@@ -798,7 +787,7 @@ def hyperparam_optimize(model, train_set, val_set, tunning_params= {'prior': ['g
         del best_params[metric]
         return best_params, best_metric_val, exp_grid_df
 
-def main(min_count = 50, drop = 0.5, n_folds = 5, outfile = 'out.log'):
+def main(min_count = 50, drop = 0.5, n_folds = 5, model_idx = -1, outfile = 'out.log'):
     """ Main function for training and evaluating AAE methods on MIMIC data """
     print('drop = {}; min_count = {}, n_folds = {}'.format(drop, min_count, n_folds))
     # drop = 0.5
@@ -851,8 +840,11 @@ def main(min_count = 50, drop = 0.5, n_folds = 5, outfile = 'out.log'):
 
 
     log("drop = {}, min_count = {}".format(drop, min_count), logfile=outfile)
-    metrics_df = run_cv_pipeline(bags, drop, min_count, n_folds, outfile)
-    metrics_df.to_csv('./{}.csv'.format(outfile), sep = '\t')
+    sets_to_try = MODELS_WITH_HYPERPARAMS if model_idx < 0 else [MODELS_WITH_HYPERPARAMS[model_idx]]
+
+    for model, hyperparams_to_try in sets_to_try:
+        metrics_df = run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_to_try)
+        metrics_df.to_csv('./{}_{}.csv'.format(outfile, str(model)[0:48]), sep = '\t')
 
 # def main():
 #     """Uncomment to generate plots with histograms per variable"""
@@ -901,7 +893,7 @@ def eval_different_drop_values(drop_vals, bags, min_count, n_folds, outfile):
             plt.show()
 
 
-def run_cv_pipeline(bags, drop, min_count, n_folds, outfile):
+def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_to_try):
     metrics_per_drop_per_model = []
     # todo: depending on the drop, remove  entries where there is nothing left to predict from
     train_sets, val_sets, test_sets, y_tests = prepare_evaluation_kfold_cv(bags, min_count=min_count, drop=drop,
@@ -910,8 +902,6 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile):
     for c_fold in range(n_folds):
         log("FOLD = {}".format(c_fold), logfile=outfile)
         log("TIME: {}".format(datetime.now().strftime("%Y-%m-%d-%H:%M")), logfile=outfile)
-
-
         train_set = train_sets[c_fold]
         val_set = val_sets[c_fold]
         test_set = test_sets[c_fold]
@@ -929,48 +919,49 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile):
         # the known items in the test set, just to not recompute
         x_test = lists2sparse(test_set.data, test_set.size(1)).tocsr(copy=False)
         model_cpy = None
+        if model_cpy is None and not hasattr(model, 'reset_parameters'):
+            model_cpy = copy.deepcopy(model)
+        log('=' * 78, logfile=outfile)
+        log(model, logfile=outfile)
+        log("training model \n TIME: {}  ".format(datetime.now().strftime("%Y-%m-%d-%H:%M")), logfile=outfile)
+        # if not hasattr(model, 'zero_grad'):
+        #     model = copy.deepcopy(model_cpy)
+        # else:
+        #     model.zero_grad()  # see if we can skip deepcopy and just use zero_grad instead ?
+        if hyperparams_to_try is not None and c_fold == 0: # for time constraints, just run hyperparams once
+            log('Optimizing on following hyper params: ', logfile=outfile)
+            log(hyperparams_to_try, logfile=outfile)
+            best_params, _, _ = hyperparam_optimize(model, train_set, val_set.clone(),
+                                                    tunning_params=hyperparams_to_try,
+                                                    drop=drop)
+            log('After hyperparam_optimize, best params: ', logfile=outfile)
+            log(best_params, logfile=outfile)
+            model.model_params = best_params
+        # Training
+        if hasattr(model, 'reset_parameters'):
+            model.reset_parameters()
+        else:
+            model = copy.deepcopy(model_cpy)
 
-        for model, hyperparams_to_try in MODELS_WITH_HYPERPARAMS:
-            if model_cpy is None and not hasattr(model, 'reset_parameters'):
-                model_cpy = copy.deepcopy(model)
-            log('=' * 78, logfile=outfile)
-            log(model, logfile=outfile)
-            log("training model \n TIME: {}  ".format(datetime.now().strftime("%Y-%m-%d-%H:%M")), logfile=outfile)
-            # if not hasattr(model, 'zero_grad'):
-            #     model = copy.deepcopy(model_cpy)
-            # else:
-            #     model.zero_grad()  # see if we can skip deepcopy and just use zero_grad instead ?
-            if hyperparams_to_try is not None and c_fold == 0: # for time constraints, just run hyperparams once
-                log('Optimizing on following hyper params: ', logfile=outfile)
-                log(hyperparams_to_try, logfile=outfile)
-                best_params, _, _ = hyperparam_optimize(model, train_set, val_set.clone(),
-                                                        tunning_params=hyperparams_to_try,
-                                                        drop=drop)
-                log('After hyperparam_optimize, best params: ', logfile=outfile)
-                log(best_params, logfile=outfile)
-                model.model_params = best_params
-            # Training
-            if hasattr(model, 'reset_parameters'):
-                model.reset_parameters()
-            gc.collect()
-            model.train(train_set)
-            # Prediction
-            y_pred = model.predict(test_set)
-            log(" TRAIN AND PREDICT COMPLETE \n TIME: {}".format(datetime.now().strftime("%Y-%m-%d-%H:%M")), logfile=outfile)
-            # Sanity-fix #1, make sparse stuff dense, expect array
-            if sp.issparse(y_pred):
-                y_pred = y_pred.toarray()
-            else:
-                y_pred = np.asarray(y_pred)
-            # Sanity-fix, remove predictions for already present items
-            y_pred = remove_non_missing(y_pred, x_test, copy=False)
-            # Evaluate metrics
-            results = evaluate(y_test, y_pred, METRICS)
-            log("-" * 78, logfile=outfile)
-            for metric, stats in zip(METRICS, results):
-                log("* FOLD#{} {}: {} ({})".format(c_fold, metric, *stats), logfile=outfile)
-                metrics_per_drop_per_model.append([c_fold, drop, str(model), metric, stats[0], stats[1]])
-            log('=' * 78, logfile=outfile)
+        gc.collect()
+        model.train(train_set)
+        # Prediction
+        y_pred = model.predict(test_set)
+        log(" TRAIN AND PREDICT COMPLETE \n TIME: {}".format(datetime.now().strftime("%Y-%m-%d-%H:%M")), logfile=outfile)
+        # Sanity-fix #1, make sparse stuff dense, expect array
+        if sp.issparse(y_pred):
+            y_pred = y_pred.toarray()
+        else:
+            y_pred = np.asarray(y_pred)
+        # Sanity-fix, remove predictions for already present items
+        y_pred = remove_non_missing(y_pred, x_test, copy=False)
+        # Evaluate metrics
+        results = evaluate(y_test, y_pred, METRICS)
+        log("-" * 78, logfile=outfile)
+        for metric, stats in zip(METRICS, results):
+            log("* FOLD#{} {}: {} ({})".format(c_fold, metric, *stats), logfile=outfile)
+            metrics_per_drop_per_model.append([c_fold, drop, str(model), metric, stats[0], stats[1]])
+        log('=' * 78, logfile=outfile)
     metrics_df = pd.DataFrame(metrics_per_drop_per_model,
                               columns=['fold', 'drop', 'model', 'metric', 'metric_val', 'metric_std'])
     return metrics_df
@@ -988,6 +979,7 @@ if __name__ == '__main__':
                         help='Drop parameter', default=0.5)
     parser.add_argument('-nf', '--n_folds', type=int,
                         help='Number of folds', default=5)
+    parser.add_argument('-mi', '--model_idx', type=int, default=-1)
     args = parser.parse_args()
     print(args)
 
