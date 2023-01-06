@@ -8,6 +8,7 @@ Run via:
 """
 import argparse
 import re
+import pickle
 from datetime import datetime
 import numpy as np
 import scipy.sparse as sp
@@ -637,6 +638,9 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_
             y_pred = np.asarray(y_pred)
         # Sanity-fix, remove predictions for already present items
         y_pred = remove_non_missing(y_pred, x_test, copy=False)
+        save_payload = {"test_set": test_set, "x_test": x_test, "y_pred" : y_pred}
+        save_object(save_payload, '{}_{}_res.pkl'.format(str(model)[0:64], c_fold))
+
         # Evaluate metrics
         results = evaluate(y_test, y_pred, METRICS)
         log("-" * 78, logfile=outfile)
@@ -647,6 +651,11 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_
     metrics_df = pd.DataFrame(metrics_per_drop_per_model,
                               columns=['fold', 'drop', 'model', 'metric', 'metric_val', 'metric_std'])
     return metrics_df
+
+def save_object(obj, filename):
+    with open(filename, 'wb') as outp:  # Overwrites any existing file.
+        pickle.dump(obj, outp, pickle.HIGHEST_PROTOCOL)
+
 
 
 if __name__ == '__main__':
