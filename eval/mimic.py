@@ -9,6 +9,7 @@ Run via:
 import argparse
 import re
 import pickle
+import os.path
 from datetime import datetime
 import numpy as np
 import scipy.sparse as sp
@@ -526,7 +527,7 @@ def main(min_count = 50, drop = 0.5, n_folds = 5, model_idx = -1, outfile = 'out
     sets_to_try = MODELS_WITH_HYPERPARAMS if model_idx < 0 else [MODELS_WITH_HYPERPARAMS[model_idx]]
 
     for model, hyperparams_to_try in sets_to_try:
-        metrics_df = run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_to_try)
+        metrics_df = run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_to_try, split_sets_filename="splitsets.pkl")
         metrics_df.to_csv('./{}_{}.csv'.format(outfile, str(model)[0:48]), sep = '\t')
 
 # def main():
@@ -576,11 +577,20 @@ def eval_different_drop_values(drop_vals, bags, min_count, n_folds, outfile):
             plt.show()
 
 
-def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_to_try):
+def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_to_try, split_sets_filename = None):
     metrics_per_drop_per_model = []
     # todo: depending on the drop, remove  entries where there is nothing left to predict from
-    train_sets, val_sets, test_sets, y_tests = prepare_evaluation_kfold_cv(bags, min_count=min_count, drop=drop,
-                                                                           n_folds=n_folds)
+    train_sets, val_sets, test_sets, y_tests = None, None, None, None
+    if split_sets_filename is not None and os.path.exists(split_sets_filename):
+        with (open(split_sets_filename, "rb")) as openfile:
+            train_sets, val_sets, test_sets, y_tests = pickle.load(openfile)
+    else:
+        train_sets, val_sets, test_sets, y_tests = prepare_evaluation_kfold_cv(bags, min_count=min_count, drop=drop,
+                                                                               n_folds=n_folds)
+
+    if split_sets_filename is not None and not os.path.exists(split_sets_filename):
+        save_object((train_sets, val_sets, test_sets, y_tests), split_sets_filename)
+
     best_params = None
     for c_fold in range(n_folds):
         log("FOLD = {}".format(c_fold), logfile=outfile)
