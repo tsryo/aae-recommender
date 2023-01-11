@@ -682,7 +682,7 @@ class AdversarialAutoEncoder(AutoEncoderMixin):
             for attr in attrs_to_call:
                 attr.reset_parameters()
 
-        if self.optimizer is not None:
+        if self.optimizer is not None and hasattr(self, 'parameters'):
             self.optimizer = torch.optim.Adam(self.parameters(), self.optimizer.param_groups[0]['lr'])
 
     def ae_step(self, batch, condition_data=None):
