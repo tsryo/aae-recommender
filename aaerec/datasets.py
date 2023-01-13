@@ -494,19 +494,22 @@ class BagsWithVocab(Bags):
         # array of tokens which acts as reverse vocab
         self.index2token = {v: k for k, v in vocab.items()}
 
-    def clone(self):
+    def clone(self, start_from=0, n_items=None):
         """ Creates a really deep copy """
         # safe cloning of an instance
         # deepcopy is NOT enough
-        data = [[t for t in b] for b in self.data]
+        n_items = len(self.data) if n_items is None else n_items + start_from
+        data = [[t for t in self.data[b]] for b in range(start_from, n_items)]
         vocab = {k: v for k, v in self.vocab.items()}
-        bag_owners = [o for o in self.bag_owners]
+        bag_owners = [self.bag_owners[o] for o in range(start_from, n_items)]
+        owner_attributes = None
         if self.owner_attributes is not None:
-            attributes = {attr: {token: value for token, value in value_by_token.items()}
-                          for attr, value_by_token in self.owner_attributes.items()}
+            owner_attributes = {list(self.owner_attributes.keys())[i]: {list(list(self.owner_attributes.items())[i][1].keys())[j]: list(list(self.owner_attributes.items())[i][1].values())[j]
+                                                                        for j in range(start_from, n_items)}
+                                for i in range(len(self.owner_attributes.items()))}
 
         return BagsWithVocab(data, vocab, owners=bag_owners,
-                             attributes=attributes)
+                             attributes=owner_attributes)
 
     def build_vocab(self, min_count=None, max_features=None, apply=True):
         """ Override to prevent errors like building vocab of indices """

@@ -696,12 +696,15 @@ class AdversarialAutoEncoder(AutoEncoderMixin):
         :param condition: ??? ~ training_set.get_single_attribute("title") <~ side_info = unpack_playlists(playlists)
         :return:
         """
+        self.nan_to_num_weights_and_biases('enc')
         z_sample = self.enc(batch)
+
         use_condition = _check_conditions(self.conditions, condition_data)
         if use_condition:
             #wtf = [[x + TINY if in_list >= 3 else x for x in condition_data[in_list]] for in_list in range(len(condition_data))]
             z_sample = self.conditions.encode_impose(z_sample, condition_data)
 
+        self.nan_to_num_weights_and_biases('dec')
         x_sample = self.dec(z_sample)
         x_sample = torch.nan_to_num(x_sample)
         recon_loss = F.binary_cross_entropy(x_sample + TINY,
@@ -728,14 +731,15 @@ class AdversarialAutoEncoder(AutoEncoderMixin):
     def disc_step(self, batch):
         """ Perform one discriminator step on batch """
         self.enc.eval()
+
         z_real = Variable(self.prior_sampler((batch.size(0), self.n_code)))
         if self.prior_scale is not None:
             z_real = z_real * self.prior_scale
-
+        self.nan_to_num_weights_and_biases('enc')
         if torch.cuda.is_available():
             z_real = z_real.cuda()
         z_fake = self.enc(batch)
-
+        self.nan_to_num_weights_and_biases('disc')
         # Compute discrimnator outputs and loss
         disc_real_out, disc_fake_out = self.disc(z_real), self.disc(z_fake)
         disc_loss = -torch.mean(torch.log(disc_real_out + TINY)
@@ -746,8 +750,50 @@ class AdversarialAutoEncoder(AutoEncoderMixin):
 
         return disc_loss.data.item()
 
+    def nan_to_num_weights_and_biases(self, comp_nm):
+        if comp_nm == 'disc':
+            if torch.any(torch.isnan(self.disc.lin1.bias.T)):
+                self.disc.lin1.bias.data = torch.nan_to_num(self.disc.lin1.bias.data)
+            if torch.any(torch.isnan(self.disc.lin2.bias.T)):
+                self.disc.lin2.bias.data = torch.nan_to_num(self.disc.lin2.bias.data)
+            if torch.any(torch.isnan(self.disc.lin3.bias.T)):
+                self.disc.lin3.bias.data = torch.nan_to_num(self.disc.lin3.bias.data)
+            if torch.any(torch.isnan(self.disc.lin1.weight.T)):
+                self.disc.lin1.weight.data = torch.nan_to_num(self.disc.lin1.weight.data)
+            if torch.any(torch.isnan(self.disc.lin2.weight.T)):
+                self.disc.lin2.weight.data = torch.nan_to_num(self.disc.lin2.weight.data)
+            if torch.any(torch.isnan(self.disc.lin3.weight.T)):
+                self.disc.lin3.weight.data = torch.nan_to_num(self.disc.lin3.weight.data)
+        if comp_nm == 'dec':
+            if torch.any(torch.isnan(self.dec.lin1.bias.T)):
+                self.dec.lin1.bias.data = torch.nan_to_num(self.dec.lin1.bias.data)
+            if torch.any(torch.isnan(self.dec.lin2.bias.T)):
+                self.dec.lin2.bias.data = torch.nan_to_num(self.dec.lin2.bias.data)
+            if torch.any(torch.isnan(self.dec.lin3.bias.T)):
+                self.dec.lin3.bias.data = torch.nan_to_num(self.dec.lin3.bias.data)
+            if torch.any(torch.isnan(self.dec.lin1.weight.T)):
+                self.dec.lin1.weight.data = torch.nan_to_num(self.dec.lin1.weight.data)
+            if torch.any(torch.isnan(self.dec.lin2.weight.T)):
+                self.dec.lin2.weight.data = torch.nan_to_num(self.dec.lin2.weight.data)
+            if torch.any(torch.isnan(self.dec.lin3.weight.T)):
+                self.dec.lin3.weight.data = torch.nan_to_num(self.dec.lin3.weight.data)
+        if comp_nm == 'enc':
+            if torch.any(torch.isnan(self.enc.lin1.bias.T)):
+                self.enc.lin1.bias.data = torch.nan_to_num(self.enc.lin1.bias.data)
+            if torch.any(torch.isnan(self.enc.lin2.bias.T)):
+                self.enc.lin2.bias.data = torch.nan_to_num(self.enc.lin2.bias.data)
+            if torch.any(torch.isnan(self.enc.lin3.bias.T)):
+                self.enc.lin3.bias.data = torch.nan_to_num(self.enc.lin3.bias.data)
+            if torch.any(torch.isnan(self.enc.lin1.weight.T)):
+                self.enc.lin1.weight.data = torch.nan_to_num(self.enc.lin1.weight.data)
+            if torch.any(torch.isnan(self.enc.lin2.weight.T)):
+                self.enc.lin2.weight.data = torch.nan_to_num(self.enc.lin2.weight.data)
+            if torch.any(torch.isnan(self.enc.lin3.weight.T)):
+                self.enc.lin3.weight.data = torch.nan_to_num(self.enc.lin3.weight.data)
+
     def gen_step(self, batch):
         self.enc.train()
+        self.nan_to_num_weights_and_biases('enc')
         z_fake_dist = self.enc(batch)
         disc_fake_out = self.disc(z_fake_dist)
         gen_loss = -torch.mean(torch.log(disc_fake_out + TINY))
