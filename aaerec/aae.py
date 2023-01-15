@@ -460,7 +460,20 @@ class AutoEncoder():
                 attr.reset_parameters()
                 attr.zero_grad()
 
-        if self.optimizer is not None:
+        self.dec.lin1.reset_parameters()
+        self.dec.lin2.reset_parameters()
+        self.dec.lin3.reset_parameters()
+        self.dec.lin1.reset_parameters()
+        self.dec.lin2.reset_parameters()
+        self.dec.lin3.reset_parameters()
+
+        self.enc.lin1.reset_parameters()
+        self.enc.lin2.reset_parameters()
+        self.enc.lin3.reset_parameters()
+        self.enc.lin1.reset_parameters()
+        self.enc.lin2.reset_parameters()
+        self.enc.lin3.reset_parameters()
+        if self.optimizer is not None and hasattr(self, 'parameters'):
             self.optimizer = torch.optim.Adam(self.parameters(), self.optimizer.param_groups[0]['lr'])
 
 
@@ -681,6 +694,26 @@ class AdversarialAutoEncoder(AutoEncoderMixin):
                              hasattr(getattr(self, attr), 'reset_parameters')]
             for attr in attrs_to_call:
                 attr.reset_parameters()
+            self.disc.lin1.reset_parameters()
+            self.disc.lin2.reset_parameters()
+            self.disc.lin3.reset_parameters()
+            self.disc.lin1.reset_parameters()
+            self.disc.lin2.reset_parameters()
+            self.disc.lin3.reset_parameters()
+
+            self.dec.lin1.reset_parameters()
+            self.dec.lin2.reset_parameters()
+            self.dec.lin3.reset_parameters()
+            self.dec.lin1.reset_parameters()
+            self.dec.lin2.reset_parameters()
+            self.dec.lin3.reset_parameters()
+
+            self.enc.lin1.reset_parameters()
+            self.enc.lin2.reset_parameters()
+            self.enc.lin3.reset_parameters()
+            self.enc.lin1.reset_parameters()
+            self.enc.lin2.reset_parameters()
+            self.enc.lin3.reset_parameters()
 
         if self.optimizer is not None and hasattr(self, 'parameters'):
             self.optimizer = torch.optim.Adam(self.parameters(), self.optimizer.param_groups[0]['lr'])
