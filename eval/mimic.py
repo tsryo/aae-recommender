@@ -488,7 +488,7 @@ def main(min_count = 50, drop = 0.5, n_folds = 5, model_idx = -1, outfile = 'out
     bags = Bags(bags_of_patients, ids, side_info)  # with conditions
     log("Whole dataset:", logfile=outfile)
 
-    all_ages = list(side_info['age'].values())
+    # all_ages = list(side_info['age'].values())
 
     log(bags, logfile=outfile)
     all_codes = [c for c_list in list(side_info['icd9_code_lst'].values()) for c in c_list]
@@ -496,8 +496,8 @@ def main(min_count = 50, drop = 0.5, n_folds = 5, model_idx = -1, outfile = 'out
     n_codes_uniq = len(t_codes)
     n_codes_all = len(all_codes)
     code_counts = pd.value_counts(all_codes)
-    all_unique_codes = set(all_codes)
-    all_unique_code_defs = set([cd for cd_list in list(side_info['ICD9_defs_txt'].values()) for cd in cd_list])
+    # all_unique_codes = set(all_codes)
+    # all_unique_code_defs = set([cd for cd_list in list(side_info['ICD9_defs_txt'].values()) for cd in cd_list])
 
     log("Total number of codes in current dataset = {}".format(n_codes_all), logfile=outfile)
     log("Total number of unique codes in current dataset = {}".format(n_codes_uniq), logfile=outfile)
@@ -525,7 +525,11 @@ def main(min_count = 50, drop = 0.5, n_folds = 5, model_idx = -1, outfile = 'out
 
     log("drop = {}, min_count = {}".format(drop, min_count), logfile=outfile)
     sets_to_try = MODELS_WITH_HYPERPARAMS if model_idx < 0 else [MODELS_WITH_HYPERPARAMS[model_idx]]
-    del MODELS_WITH_HYPERPARAMS
+    models_to_del = [i for i in range(len(MODELS_WITH_HYPERPARAMS)) if i != model_idx]
+    for i in list(reversed(models_to_del)):
+        del MODELS_WITH_HYPERPARAMS[i]
+    # del MODELS_WITH_HYPERPARAMS # somehow this causes line above with sets_to_try initialisation to fail..
+
     for model, hyperparams_to_try in sets_to_try:
         metrics_df = run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_to_try, split_sets_filename="splitsets.pkl")
         metrics_df.to_csv('./{}_{}.csv'.format(outfile, str(model)[0:48]), sep = '\t')
