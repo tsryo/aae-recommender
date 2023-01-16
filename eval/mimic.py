@@ -525,7 +525,7 @@ def main(min_count = 50, drop = 0.5, n_folds = 5, model_idx = -1, outfile = 'out
 
     log("drop = {}, min_count = {}".format(drop, min_count), logfile=outfile)
     sets_to_try = MODELS_WITH_HYPERPARAMS if model_idx < 0 else [MODELS_WITH_HYPERPARAMS[model_idx]]
-
+    del MODELS_WITH_HYPERPARAMS
     for model, hyperparams_to_try in sets_to_try:
         metrics_df = run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_to_try, split_sets_filename="splitsets.pkl")
         metrics_df.to_csv('./{}_{}.csv'.format(outfile, str(model)[0:48]), sep = '\t')
@@ -591,8 +591,13 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_
     if split_sets_filename is not None and not os.path.exists(split_sets_filename):
         save_object((train_sets, val_sets, test_sets, y_tests), split_sets_filename)
 
+    del bags
     best_params = None
     for c_fold in range(n_folds):
+        if c_fold != 0: # load from file trian/test/val sets and then delete them
+            with (open(split_sets_filename, "rb")) as openfile:
+                train_sets, val_sets, test_sets, y_tests = pickle.load(openfile)
+
         log("FOLD = {}".format(c_fold), logfile=outfile)
         log("TIME: {}".format(datetime.now().strftime("%Y-%m-%d-%H:%M")), logfile=outfile)
         train_set = train_sets[c_fold]
@@ -607,6 +612,12 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_
 
         log("Test set:", logfile=outfile)
         log(test_set, logfile=outfile)
+
+        del train_sets
+        del val_sets
+        del test_sets
+
+
         # THE GOLD (put into sparse matrix)
         y_test = lists2sparse(y_test, test_set.size(1)).tocsr(copy=False)
         # the known items in the test set, just to not recompute
@@ -617,10 +628,6 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_
         log('=' * 78, logfile=outfile)
         log(model, logfile=outfile)
         log("training model \n TIME: {}  ".format(datetime.now().strftime("%Y-%m-%d-%H:%M")), logfile=outfile)
-        # if not hasattr(model, 'zero_grad'):
-        #     model = copy.deepcopy(model_cpy)
-        # else:
-        #     model.zero_grad()  # see if we can skip deepcopy and just use zero_grad instead ?
         if hyperparams_to_try is not None and c_fold == 0: # for time constraints, just run hyperparams once
             log('Optimizing on following hyper params: ', logfile=outfile)
             log(hyperparams_to_try, logfile=outfile)
@@ -631,11 +638,14 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_
             log('After hyperparam_optimize, best params: ', logfile=outfile)
             log(best_params, logfile=outfile)
             model.model_params = best_params
+
         # Training
         if hasattr(model, 'reset_parameters'):
             model.reset_parameters()
         else:
+            log("Calling deepcopy for model", logfile=outfile)
             model = copy.deepcopy(model_cpy)
+            del model_cpy
 
         gc.collect()
         model.train(train_set)
@@ -652,6 +662,9 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_
         save_payload = {"test_set": test_set, "x_test": x_test, "y_pred" : y_pred}
         save_object(save_payload, '{}_{}_res.pkl'.format(str(model)[0:64], c_fold))
 
+        del test_set
+        del train_set
+        del val_set
         # Evaluate metrics
         results = evaluate(y_test, y_pred, METRICS)
         log("-" * 78, logfile=outfile)
