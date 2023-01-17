@@ -475,7 +475,7 @@ def hyperparam_optimize(model, train_set, val_set, tunning_params= {'prior': ['g
         del best_params[metric]
         return best_params, best_metric_val, exp_grid_df
 
-def main(min_count = 50, drop = 0.5, n_folds = 5, model_idx = -1, outfile = 'out.log'):
+def main(min_count = 50, drop = 0.5, n_folds = 5, model_idx = -1, outfile = 'out.log', fold_index = -1):
     """ Main function for training and evaluating AAE methods on MIMIC data """
     print('drop = {}; min_count = {}, n_folds = {}, model_idx = {}'.format(drop, min_count, n_folds, model_idx))
     print("Loading data from", DATA_PATH)
@@ -531,7 +531,7 @@ def main(min_count = 50, drop = 0.5, n_folds = 5, model_idx = -1, outfile = 'out
     # del MODELS_WITH_HYPERPARAMS # somehow this causes line above with sets_to_try initialisation to fail..
 
     for model, hyperparams_to_try in sets_to_try:
-        metrics_df = run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_to_try, split_sets_filename="splitsets.pkl")
+        metrics_df = run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_to_try, split_sets_filename="splitsets.pkl", fold_index=fold_index)
         metrics_df.to_csv('./{}_{}.csv'.format(outfile, str(model)[0:48]), sep = '\t')
 
 # def main():
@@ -581,7 +581,7 @@ def eval_different_drop_values(drop_vals, bags, min_count, n_folds, outfile):
             plt.show()
 
 
-def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_to_try, split_sets_filename = None):
+def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_to_try, split_sets_filename = None, fold_index=-1):
     metrics_per_drop_per_model = []
     # todo: depending on the drop, remove  entries where there is nothing left to predict from
     train_sets, val_sets, test_sets, y_tests = None, None, None, None
@@ -601,7 +601,8 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_
         if c_fold != 0: # load from file trian/test/val sets and then delete them
             with (open(split_sets_filename, "rb")) as openfile:
                 train_sets, val_sets, test_sets, y_tests = pickle.load(openfile)
-
+        if fold_index >= 0 and c_fold != fold_index:
+            continue
         log("FOLD = {}".format(c_fold), logfile=outfile)
         log("TIME: {}".format(datetime.now().strftime("%Y-%m-%d-%H:%M")), logfile=outfile)
         train_set = train_sets[c_fold]
@@ -642,6 +643,9 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_
             log('After hyperparam_optimize, best params: ', logfile=outfile)
             log(best_params, logfile=outfile)
             model.model_params = best_params
+        if fold_index >= 0: # when we specify a fold, we assume the hyperparam tunning was already done
+            model.model_params = hyperparams_to_try
+
 
         # Training
         if hasattr(model, 'reset_parameters'):
@@ -702,7 +706,8 @@ if __name__ == '__main__':
                         default=-1)
     parser.add_argument('-le', '--load_embeddings', type=int, help='Load embeddings',
                         default=0)
-
+    parser.add_argument('-fi', '--fold_index', type=int, help='cv-fold to run',
+                        default=-1)
     args = parser.parse_args()
     print(args)
 
@@ -787,20 +792,10 @@ if __name__ == '__main__':
           'normalize_inputs': [True]},),
         (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS,
                         **ae_params),
-         {'lr': [0.001, 0.01],
-          'n_code': [50, 100],
-          'n_epochs': [25, 50],
-          'batch_size': [25, 50],
-          'n_hidden': [25, 50],
-          'normalize_inputs': [True]},),
+         {'lr': 0.001, 'n_code': 50, 'n_epochs': 50, 'batch_size': 25, 'n_hidden': 50, 'normalize_inputs': True},),
         (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS_WITH_TEXT,
                         **ae_params),
-         {'lr': [0.001, 0.01],
-          'n_code': [50, 100],
-          'n_epochs': [25, 50],
-          'batch_size': [25, 50],
-          'n_hidden': [25, 50],
-          'normalize_inputs': [True]},),
+         {'lr': 0.001, 'n_code': 50, 'n_epochs': 50, 'batch_size': 25, 'n_hidden': 50, 'normalize_inputs': True},),
 
         # *** DAEs
         (DAERecommender(conditions=None, **ae_params),
@@ -863,24 +858,12 @@ if __name__ == '__main__':
           'normalize_inputs': [True]},),
         (
         AAERecommender(adversarial=True, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS, **ae_params),
-        {'prior': ['gauss'],
-         'gen_lr': [0.001, 0.01],
-         'reg_lr': [0.001],
-         'n_code': [50, 100],
-         'n_epochs': [25, 50],
-         'batch_size': [25, 50],
-         'n_hidden': [25, 50],
-         'normalize_inputs': [True]},),
+        {'prior': 'gauss', 'gen_lr': 0.001, 'reg_lr': 0.001, 'n_code': 100, 'n_epochs': 50, 'batch_size': 25,
+         'n_hidden': 50, 'normalize_inputs': True},),
         (AAERecommender(adversarial=True, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS_WITH_TEXT,
                         **ae_params),
-         {'prior': ['gauss'],
-          'gen_lr': [0.001, 0.01],
-          'reg_lr': [0.001],
-          'n_code': [50, 100],
-          'n_epochs': [25, 50],
-          'batch_size': [25, 50],
-          'n_hidden': [25, 50],
-          'normalize_inputs': [True]},),
+         {'prior': 'gauss', 'gen_lr': 0.001, 'reg_lr': 0.001, 'n_code': 100, 'n_epochs': 50, 'batch_size': 25,
+          'n_hidden': 50, 'normalize_inputs': True},),
     ]
 
-    main(outfile=args.outfile, min_count=args.min_count, drop=args.drop, n_folds=args.n_folds, model_idx=args.model_idx)
+    main(outfile=args.outfile, min_count=args.min_count, drop=args.drop, n_folds=args.n_folds, model_idx=args.model_idx, fold_index=args.fold_index)
