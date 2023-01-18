@@ -532,7 +532,7 @@ def main(min_count = 50, drop = 0.5, n_folds = 5, model_idx = -1, outfile = 'out
 
     for model, hyperparams_to_try in sets_to_try:
         metrics_df = run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_to_try, split_sets_filename="splitsets.pkl", fold_index=fold_index)
-        metrics_df.to_csv('./{}_{}.csv'.format(outfile, str(model)[0:48]), sep = '\t')
+        metrics_df.to_csv('./{}_{}_{}.csv'.format(outfile, str(model)[0:48], fold_index), sep = '\t')
 
 # def main():
 #     """Uncomment to generate plots with histograms per variable"""
@@ -598,6 +598,7 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_
     del bags
     best_params = None
     for c_fold in range(n_folds):
+        # init
         if c_fold != 0: # load from file trian/test/val sets and then delete them
             with (open(split_sets_filename, "rb")) as openfile:
                 train_sets, val_sets, test_sets, y_tests = pickle.load(openfile)
@@ -618,45 +619,49 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_
         log("Test set:", logfile=outfile)
         log(test_set, logfile=outfile)
 
+        # reduce memory consumption
         del train_sets
         del val_sets
         del test_sets
-
 
         # THE GOLD (put into sparse matrix)
         y_test = lists2sparse(y_test, test_set.size(1)).tocsr(copy=False)
         # the known items in the test set, just to not recompute
         x_test = lists2sparse(test_set.data, test_set.size(1)).tocsr(copy=False)
+
+        # use model copy to reset model state on each fold
         model_cpy = None
         if model_cpy is None and not hasattr(model, 'reset_parameters'):
             model_cpy = copy.deepcopy(model)
         log('=' * 78, logfile=outfile)
         log(model, logfile=outfile)
         log("training model \n TIME: {}  ".format(datetime.now().strftime("%Y-%m-%d-%H:%M")), logfile=outfile)
-        if hyperparams_to_try is not None and c_fold == 0: # for time constraints, just run hyperparams once
+
+        # Optimize hyperparams
+        if fold_index >= 0: # when we specify a fold, we assume the hyperparam tunning was already done
+            model.model_params = hyperparams_to_try
+        elif hyperparams_to_try is not None and c_fold == 0: # for time constraints, just run hyperparams once
             log('Optimizing on following hyper params: ', logfile=outfile)
             log(hyperparams_to_try, logfile=outfile)
-            train_set = train_set.clone(0, int(len(train_set.data) * 0.3)) # use only a third of training set to tune params on (reduce running time)
-            best_params, _, _ = hyperparam_optimize(model, train_set, val_set.clone(),
-                                                    tunning_params=hyperparams_to_try,
-                                                    drop=drop)
+            # use only a third of training set to tune params on (reduce running time)
+            tunning_train_set = train_set.clone(0, int(len(train_set.data) * 0.3))
+            best_params, _, _ = hyperparam_optimize(model, tunning_train_set, val_set.clone(), tunning_params=hyperparams_to_try, drop=drop)
             log('After hyperparam_optimize, best params: ', logfile=outfile)
             log(best_params, logfile=outfile)
             model.model_params = best_params
-        if fold_index >= 0: # when we specify a fold, we assume the hyperparam tunning was already done
-            model.model_params = hyperparams_to_try
 
-
-        # Training
+        # Reset model state
         if hasattr(model, 'reset_parameters'):
             model.reset_parameters()
         else:
             log("Calling deepcopy for model", logfile=outfile)
             model = copy.deepcopy(model_cpy)
-            del model_cpy
-
+            # del model_cpy
         gc.collect()
+
+        # Training
         model.train(train_set)
+
         # Prediction
         y_pred = model.predict(test_set)
         log(" TRAIN AND PREDICT COMPLETE \n TIME: {}".format(datetime.now().strftime("%Y-%m-%d-%H:%M")), logfile=outfile)
@@ -667,12 +672,16 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_
             y_pred = np.asarray(y_pred)
         # Sanity-fix, remove predictions for already present items
         y_pred = remove_non_missing(y_pred, x_test, copy=False)
+
+        # save model test predictions + actual test values + test inputs [may be useful to look at later]
         save_payload = {"test_set": test_set, "x_test": x_test, "y_pred" : y_pred}
         save_object(save_payload, '{}_{}_res.pkl'.format(str(model)[0:64], c_fold))
 
+        # reduce memory usage
         del test_set
         del train_set
         del val_set
+
         # Evaluate metrics
         results = evaluate(y_test, y_pred, METRICS)
         log("-" * 78, logfile=outfile)
@@ -680,6 +689,8 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_
             log("* FOLD#{} {}: {} ({})".format(c_fold, metric, *stats), logfile=outfile)
             metrics_per_drop_per_model.append([c_fold, drop, str(model), metric, stats[0], stats[1]])
         log('=' * 78, logfile=outfile)
+
+    # Return result metrics
     metrics_df = pd.DataFrame(metrics_per_drop_per_model,
                               columns=['fold', 'drop', 'model', 'metric', 'metric_val', 'metric_std'])
     return metrics_df
