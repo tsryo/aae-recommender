@@ -784,6 +784,7 @@ class AdversarialAutoEncoder(AutoEncoderMixin):
         return disc_loss.data.item()
 
     def nan_to_num_weights_and_biases(self, comp_nm):
+        return True
         if comp_nm == 'disc':
             if torch.any(torch.isnan(self.disc.lin1.bias.T)):
                 self.disc.lin1.bias.data = torch.nan_to_num(self.disc.lin1.bias.data)

@@ -13,6 +13,7 @@ import os.path
 from datetime import datetime
 import numpy as np
 import scipy.sparse as sp
+from sklearn import preprocessing
 from aaerec.datasets import Bags, corrupt_sets
 from aaerec.transforms import lists2sparse
 from aaerec.evaluation import remove_non_missing, evaluate
@@ -292,6 +293,16 @@ def prepare_evaluation_kfold_cv(bags, n_folds=5, n_items=None, min_count=None, d
     Build vocab on train set and applies it to both train and test set.
     """
     # Split 10% validation data, one submission per day is too much.
+    #todo: normalize bags conditions here
+    for k in list(bags.owner_attributes.keys()):
+        if k in ['ICD9_defs_txt', 'gender', 'ethnicity_grouped', 'admission_type', 'icd9_code_lst']:
+            continue
+        c_vals = list(bags.owner_attributes[k].values())
+        c_vals = np.nan_to_num(np.array(c_vals))
+        c_vals = preprocessing.normalize([c_vals])[0].tolist()
+        c_keys = list(bags.owner_attributes[k].keys())
+        bags.owner_attributes[k] = {c_keys[i]:c_vals[i] for i in range(len(c_keys))}
+
     train_sets, val_sets, test_sets = bags.create_kfold_train_validate_test(n_folds=n_folds)
     missings = []
     # Builds vocabulary only on training set
