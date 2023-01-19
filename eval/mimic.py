@@ -649,7 +649,7 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_
         log("training model \n TIME: {}  ".format(datetime.now().strftime("%Y-%m-%d-%H:%M")), logfile=outfile)
 
         # Optimize hyperparams
-        if fold_index >= 0: # when we specify a fold, we assume the hyperparam tunning was already done
+        if fold_index >= 0 or type(hyperparams_to_try['batch_size']) == int: # when we specify a fold, we assume the hyperparam tunning was already done
             model.model_params = hyperparams_to_try
         elif hyperparams_to_try is not None and c_fold == 0: # for time constraints, just run hyperparams once
             log('Optimizing on following hyper params: ', logfile=outfile)
