@@ -287,13 +287,9 @@ def prepare_evaluation(bags, test_size=0.1, n_items=None, min_count=None, drop=1
     dev_set.data = noisy
 
     return train_set, dev_set, missing
-def prepare_evaluation_kfold_cv(bags, n_folds=5, n_items=None, min_count=None, drop=1):
-    """
-    Split data into train and dev set.
-    Build vocab on train set and applies it to both train and test set.
-    """
-    # Split 10% validation data, one submission per day is too much.
-    #todo: normalize bags conditions here
+
+
+def normalize_conditional_data_bags(bags):
     for k in list(bags.owner_attributes.keys()):
         if k in ['ICD9_defs_txt', 'gender', 'ethnicity_grouped', 'admission_type', 'icd9_code_lst']:
             continue
@@ -302,8 +298,22 @@ def prepare_evaluation_kfold_cv(bags, n_folds=5, n_items=None, min_count=None, d
         c_vals = preprocessing.normalize([c_vals])[0].tolist()
         c_keys = list(bags.owner_attributes[k].keys())
         bags.owner_attributes[k] = {c_keys[i]:c_vals[i] for i in range(len(c_keys))}
+    return bags
+def prepare_evaluation_kfold_cv(bags, n_folds=5, n_items=None, min_count=None, drop=1):
+    """
+    Split data into train and dev set.
+    Build vocab on train set and applies it to both train and test set.
+    """
+    # Split 10% validation data, one submission per day is too much.
+    #todo: normalize bags conditions here
+
 
     train_sets, val_sets, test_sets = bags.create_kfold_train_validate_test(n_folds=n_folds)
+    #todo - normalize conditions here per set
+    for i in range(n_folds):
+        train_sets[i] = normalize_conditional_data_bags(train_sets[i])
+        test_sets[i] = normalize_conditional_data_bags(test_sets[i])
+        val_sets[i] = normalize_conditional_data_bags(val_sets[i])
     missings = []
     # Builds vocabulary only on training set
     # Limit of most frequent 50000 distinct items is for testing purposes
