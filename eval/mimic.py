@@ -665,7 +665,7 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_
             log('Optimizing on following hyper params: ', logfile=outfile)
             log(hyperparams_to_try, logfile=outfile)
             # use only a third of training set to tune params on (reduce running time)
-            tunning_train_set = train_set.clone(0, int(len(train_set.data) * 0.3))
+            tunning_train_set = train_set.clone(0, int(len(train_set.data) * 1.0))
             best_params, _, _ = hyperparam_optimize(model, tunning_train_set, val_set.clone(), tunning_params=hyperparams_to_try, drop=drop)
             log('After hyperparam_optimize, best params: ', logfile=outfile)
             log(best_params, logfile=outfile)
