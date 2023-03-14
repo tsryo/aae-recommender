@@ -33,7 +33,6 @@ import gc
 # import os, psutil
 from CONSTANTS import *
 
-# Set it to the Reuters RCV dataset
 DEBUG_LIMIT = None
 # These need to be implemented in evaluation.py
 METRICS = ['mrr', 'mrr@5', 'map', 'map@5', 'maf1', 'maf1@5']

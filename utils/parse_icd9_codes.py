@@ -1,14 +1,14 @@
 import pandas as pd
 import json
 import numpy as np
-from CONSTANTS import DATA_PATH, ICD_CODE_DEFS_PATH
+from CONSTANTS import DATA_PATH, ICD_CODE_DEFS_PATH, IN_DATA_PATH_VITALS, IN_DATA_PATH
 from eval.fiv import load
 import matplotlib.pyplot as plt
 
 SEPARATOR = ","
 ALL_TIMESERIES_MISSING_PLACEHOLDER = "*MISSING*"
-IN_DATA_PATH = "../../data/diagnoses_procedures_icd_icu_staydetail.csv"
-IN_DATA_PATH_VITALS = "../../data/vitals.csv"
+
+
 READM = True
 PLOT_FIGS = False
 GEN_VITALS_SUMMARY_TABLE = False
