@@ -259,6 +259,20 @@ CONDITIONS = ConditionList([
 ])
 CONDITIONS_WITH_TEXT = None
 
+icd_code_defs = pd.read_csv(ICD_CODE_DEFS_PATH, sep='\t')
+d_icd_code_defs = {}
+dup_keys = []
+for ii in range(len(icd_code_defs)):
+    c_code_row = icd_code_defs.iloc[ii]
+    # 'type', 'icd9_code', 'short_title', 'long_title'
+    icd9_code = c_code_row.icd9_code
+    icd9_code = 'p_' + icd9_code if c_code_row.type == 'PROCEDURE' else 'd_' + icd9_code
+    if icd9_code in d_icd_code_defs.keys():
+        print("{} already in dict! prepending 0 to new key entry to prevent override".format(icd9_code))
+        dup_keys.append(icd9_code)
+        icd9_code = icd9_code[0:2] + '0' + icd9_code[2:]
+    d_icd_code_defs[icd9_code] = c_code_row.long_title
+
 # Models without/with metadata
 MODELS_WITH_HYPERPARAMS = []
 def prepare_evaluation(bags, test_size=0.1, n_items=None, min_count=None, drop=1):
@@ -304,20 +318,14 @@ def prepare_evaluation_kfold_cv(bags, n_folds=5, n_items=None, min_count=None, d
     Split data into train and dev set.
     Build vocab on train set and applies it to both train and test set.
     """
-    # Split 10% validation data, one submission per day is too much.
-    #todo: normalize bags conditions here
-
-
+    # Split 10% validation data.
     train_sets, val_sets, test_sets = bags.create_kfold_train_validate_test(n_folds=n_folds)
-    #todo - normalize conditions here per set
     for i in range(n_folds):
         train_sets[i] = normalize_conditional_data_bags(train_sets[i])
         test_sets[i] = normalize_conditional_data_bags(test_sets[i])
         val_sets[i] = normalize_conditional_data_bags(val_sets[i])
     missings = []
     # Builds vocabulary only on training set
-    # Limit of most frequent 50000 distinct items is for testing purposes
-    #todo: ideally  you would want to build the vocab from both train and val sets
     for i in range(n_folds):
         train_set = train_sets[i]
         test_set = test_sets[i]
@@ -331,10 +339,11 @@ def prepare_evaluation_kfold_cv(bags, n_folds=5, n_items=None, min_count=None, d
         test_set = test_set.apply_vocab(vocab)
         val_set = val_set.apply_vocab(vocab)
 
-        # Drop one track off each playlist within test set
+        # Corrupt sets (currently set to remove 50% of item list items)
         print("Drop parameter:", drop)
         noisy, missing = corrupt_sets(test_set.data, drop=drop)
-        # some entries might have too few items to drop, resulting in empty missing and a full noisy, remove those from the sets
+        # some entries might have too few items to drop, resulting in empty missing and a full noisy
+        # remove those from the sets (should be just a few)
         entries_to_keep = np.where([len(missing[i]) != 0 for i in range(len(missing))])[0]
         missing = [missing[i] for i in entries_to_keep]
         noisy = [noisy[i] for i in entries_to_keep]
@@ -344,12 +353,26 @@ def prepare_evaluation_kfold_cv(bags, n_folds=5, n_items=None, min_count=None, d
         # Replace test data with corrupted data
         test_set.data = noisy
         train_sets[i] = train_set
+
+        test_set = adjust_icd_text_defs_post_corrupt(test_set)
+        val_set = adjust_icd_text_defs_post_corrupt(val_set)
+
         test_sets[i] = test_set
         val_sets[i] = val_set
+
         missings.append(missing)
 
     return train_sets, val_sets, test_sets, missings
-
+def adjust_icd_text_defs_post_corrupt(corrupted_set):
+    for j in range(0, len(corrupted_set.bag_owners)):
+        c_hadm_id = corrupted_set.bag_owners[j]
+        get_icd_code_from_index = lambda x, y: [y.index2token[c_x] for c_x in x]
+        c_icd_codes = get_icd_code_from_index(corrupted_set.data[j], corrupted_set)
+        c_code_defs = [re.sub(r'[^\w\s]', '', d_icd_code_defs[x].lower()) if x in d_icd_code_defs.keys() else '' for
+                       x in c_icd_codes]
+        # limit to first 1000 characters (todo: see if can relax this)
+        corrupted_set.owner_attributes['ICD9_defs_txt'][c_hadm_id] = (' '.join(c_code_defs))[:1000]
+    return corrupted_set
 
 def log(*print_args, logfile=None):
     """ Maybe logs the output also in the file `outfile` """
@@ -450,7 +473,6 @@ def hyperparam_optimize(model, train_set, val_set, tunning_params= {'prior': ['g
                         metric = 'maf1@10', drop = 0.5):
         noisy, y_val = corrupt_sets(val_set.data, drop=drop)
         val_set.data = noisy
-
         # assert all(x in list(c_params.keys()) for x in list(tunning_params.keys()))
         # col - hyperparam name, row = specific combination of values to try
         exp_grid_n_combs = [len(x) for x in tunning_params.values()]
@@ -468,9 +490,9 @@ def hyperparam_optimize(model, train_set, val_set, tunning_params= {'prior': ['g
         if not hasattr(model, 'reset_parameters'):
             model_cpy = copy.deepcopy(model)
         for c_idx, c_row in exp_grid_df.iterrows():
-            gc.collect()
+            # gc.collect()
             if hasattr(model, 'reset_parameters'):
-                model.reset_parameters() # see if we can skip deepcopy and just use zero_grad instead ?
+                model.reset_parameters()
             else:
                 model = copy.deepcopy(model_cpy)
 
@@ -496,12 +518,12 @@ def hyperparam_optimize(model, train_set, val_set, tunning_params= {'prior': ['g
         del best_params[metric]
         return best_params, best_metric_val, exp_grid_df
 
+# @param fold_index - run a specific fold of CV (-1 = run all folds)
 def main(min_count = 50, drop = 0.5, n_folds = 5, model_idx = -1, outfile = 'out.log', fold_index = -1):
     """ Main function for training and evaluating AAE methods on MIMIC data """
     print('drop = {}; min_count = {}, n_folds = {}, model_idx = {}'.format(drop, min_count, n_folds, model_idx))
     print("Loading data from", DATA_PATH)
     patients = load(DATA_PATH)
-    icd_code_defs = pd.read_csv(ICD_CODE_DEFS_PATH, sep = '\t')
     print("Unpacking MIMIC data...")
     bags_of_patients, ids, side_info, d_icd_code_defs = unpack_patients(patients, icd_code_defs)  # with conditions
     assert(len(set(ids)) == len(ids))
@@ -604,15 +626,15 @@ def eval_different_drop_values(drop_vals, bags, min_count, n_folds, outfile):
 
 def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_to_try, split_sets_filename = None, fold_index=-1):
     metrics_per_drop_per_model = []
-    # todo: depending on the drop, remove  entries where there is nothing left to predict from
     train_sets, val_sets, test_sets, y_tests = None, None, None, None
+    # first try to load split datasets from file
     if split_sets_filename is not None and os.path.exists(split_sets_filename):
         with (open(split_sets_filename, "rb")) as openfile:
             train_sets, val_sets, test_sets, y_tests = pickle.load(openfile)
     else:
         train_sets, val_sets, test_sets, y_tests = prepare_evaluation_kfold_cv(bags, min_count=min_count, drop=drop,
                                                                                n_folds=n_folds)
-
+    # create split datasets file if one was not there already
     if split_sets_filename is not None and not os.path.exists(split_sets_filename):
         save_object((train_sets, val_sets, test_sets, y_tests), split_sets_filename)
 
@@ -659,14 +681,18 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_
         log("training model \n TIME: {}  ".format(datetime.now().strftime("%Y-%m-%d-%H:%M")), logfile=outfile)
 
         # Optimize hyperparams
-        if fold_index >= 0 or ('batch_size' in hyperparams_to_try.keys() and type(hyperparams_to_try['batch_size']) == int): # when we specify a fold, we assume the hyperparam tunning was already done
+        # when we specify a fold, we assume the hyperparam tunning was already done
+        if fold_index >= 0 or ('batch_size' in hyperparams_to_try.keys() and
+                               type(hyperparams_to_try['batch_size']) == int):
             model.model_params = hyperparams_to_try
-        elif hyperparams_to_try is not None and c_fold == 0: # for time constraints, just run hyperparams once
+        # for time constraints, just run hyperparams once
+        elif hyperparams_to_try is not None and c_fold == 0:
             log('Optimizing on following hyper params: ', logfile=outfile)
             log(hyperparams_to_try, logfile=outfile)
             # use only a third of training set to tune params on (reduce running time)
             tunning_train_set = train_set.clone(0, int(len(train_set.data) * 1.0))
-            best_params, _, _ = hyperparam_optimize(model, tunning_train_set, val_set.clone(), tunning_params=hyperparams_to_try, drop=drop)
+            best_params, _, _ = hyperparam_optimize(model, tunning_train_set, val_set.clone(),
+                                                    tunning_params=hyperparams_to_try, drop=drop)
             log('After hyperparam_optimize, best params: ', logfile=outfile)
             log(best_params, logfile=outfile)
             model.model_params = best_params

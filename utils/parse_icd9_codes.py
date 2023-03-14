@@ -15,11 +15,106 @@ print("Reading data from {}".format(IN_DATA_PATH))
 df = pd.read_csv(IN_DATA_PATH, sep=SEPARATOR, index_col=False)
 df_vitals = pd.read_csv(IN_DATA_PATH_VITALS, sep=SEPARATOR, index_col=False)
 
+#note: not all hadm_ids have vitals, remove them from our dataset
+vital_hadm_ids = set(list(df_vitals['hadm_id']))
+
+### plotting reasons...
+from datetime import datetime
+import seaborn as sns
+sns.set_theme()
+#tips = sns.load_dataset("tips")
+
+
+df_vitals = df_vitals.sort_values(['hadm_id', 'charttime'], ascending=True)
+df_vitals_new = None
+for hadm_id in list(vital_hadm_ids):
+    c_df = df_vitals.iloc[df_vitals['hadm_id'].values == hadm_id]
+    ftime = c_df['charttime'].values[0]
+    ftime = datetime.strptime(ftime, '%Y-%m-%d %H:%M:%S')
+    time_mins = [0]
+    for time_period in c_df['charttime'].values[1:]:
+        ctime = datetime.strptime(time_period, '%Y-%m-%d %H:%M:%S')
+        c_time_in_mins = ctime - ftime
+        c_time_in_mins = int(c_time_in_mins.total_seconds())/60
+        time_mins.append(c_time_in_mins)
+
+    c_df['time_mins'] = time_mins
+    df_vitals_new = pd.concat([df_vitals_new, c_df])
+
+    # Create a visualization
+
+    plot_dir = '/mnt/c/Development/github/Python/plt/experiment/{}'
+    plot_nm = plot_dir.format('lineplot.png')
+    #sns.lmplot(data=c_df, x="time_mins", y="heartrate_min" )
+random10_hadms = list(set(df_vitals_new['hadm_id'].tolist()))[50:60]
+c_df = df_vitals_new[df_vitals_new['hadm_id'].isin(random10_hadms)]
+#sns.set(rc={'figure.figsize': (20, 10)})
+from scipy.stats import rankdata
+c_df['hadm_id'] = rankdata(c_df['hadm_id'], method = 'dense')
+
+fig = sns.relplot(data=c_df, x="time_mins", y="heartrate_min", kind="line", hue = 'hadm_id', size = 8, aspect = 2,  palette = sns.color_palette("husl", 10))
+
+fig.savefig(plot_nm, dpi = 500)
+plt.show()
+## summarize idea - for each timeseries: fit a linear model on metric over time per patient
+###  something like
+## n_measurements, n_missings, median, Q1, Q3,
+table_cols = ['heartrate_min', 'heartrate_max', 'heartrate_mean', 'sysbp_min', 'sysbp_max',
+       'sysbp_mean', 'diasbp_min', 'diasbp_max', 'diasbp_mean', 'meanbp_min',
+       'meanbp_max', 'meanbp_mean', 'resprate_min', 'resprate_max',
+       'resprate_mean', 'tempc_min', 'tempc_max', 'tempc_mean', 'spo2_min',
+       'spo2_max', 'spo2_mean', 'glucose_min', 'glucose_max', 'glucose_mean']
+vitals_table = None
+#patients = load(DATA_PATH)
+pat_cols = [ #'gender', 'los_hospital', 'age', #'ethnicity_grouped',  'admission_type', 'seq_num_len', 'icd9_code_lst', 'los_icu_lst',
+            'heartrate_min_lst_mm', 'heartrate_max_lst_mm', 'heartrate_mean_lst_mm',
+            'sysbp_min_lst_mm', 'sysbp_max_lst_mm', 'sysbp_mean_lst_mm', 'diasbp_min_lst_mm',
+            'diasbp_max_lst_mm', 'diasbp_mean_lst_mm', 'meanbp_min_lst_mm', 'meanbp_max_lst_mm', 'meanbp_mean_lst_mm',
+            'resprate_min_lst_mm', 'resprate_max_lst_mm', 'resprate_mean_lst_mm', 'tempc_min_lst_mm', 'tempc_max_lst_mm',
+            'tempc_mean_lst_mm', 'spo2_min_lst_mm', 'spo2_max_lst_mm', 'spo2_mean_lst_mm', 'glucose_min_lst_mm', 'glucose_max_lst_mm', 'glucose_mean_lst_mm'
+             ]
+for p_col in pat_cols:
+    vals = [x[p_col] for x in patients]
+    print(p_col)
+    print((sum(vals)/49002)*100)
+
+ages = [x['icd9_code_lst'] for x in patients]
+ages = [y for x in ages for y in x]
+xxxx = pd.Series(ages).value_counts()[-50:]
+rare_codes = None
+for c_key in xxxx.keys().tolist():
+    is_diag = 'd_' in c_key
+    type_filter = 'DIAGNOSE' if is_diag else 'PROCEDURE'
+    c_df = icd_code_defs[icd_code_defs['type'] == type_filter]
+    c_df = c_df[c_df['icd9_code'] == c_key[2:]]
+    rare_codes = pd.concat([c_df, rare_codes])
+
+np.where(np.isnan(ages))
+np.nanmedian(ages)
+np.nanquantile(ages,0.25)
+np.nanquantile(ages,0.75)
+
+for t_col in table_cols:
+    c_vals = df_vitals[t_col].values
+    c_row = {
+        "n_measurements": len(c_vals)-len(np.where(np.isnan(c_vals))[0]),
+        "med" : np.nanmedian(c_vals),
+        "q1" : np.nanquantile(c_vals, q = 0.25),
+        "q3" : np.nanquantile(c_vals, q=0.75),
+        "vital": t_col,
+    }
+    c_row = pd.DataFrame(pd.Series(c_row))
+    c_row = pd.DataFrame.transpose(c_row)
+    vitals_table = pd.concat([vitals_table, c_row])
+
+vitals_table.to_csv('vitals_table.csv', sep = '\t')
+
+c_df.columns
+
 df_conditions = None #pd.read_csv(IN_DATA_PATH_ICUSTAY_DETAIL, sep=SEPARATOR, index_col=False)
 print(df.head())
 
-#note: not all hadm_ids have vitals, remove them from our dataset
-vital_hadm_ids = set(list(df_vitals['hadm_id']))
+
 # todo: print how many you  remove
 #print()
 icd_all = list(df['icd9_code'].values)
@@ -165,6 +260,12 @@ n_iters_needed = np.ceil(len(all_hadm_ids)/READ_BUFFER_SIZE)
 
 df_cpy = df
 df_vitals_cpy = df_vitals
+df2 = df[['hadm_id', 'icd9_code']]
+df2 = df2.groupby(['hadm_id'])
+df2 = df2.count()
+icd_per_admission = df2.icd9_code.tolist()
+np.median(icd_per_admission) # 15
+np.percentile(icd_per_admission, [25, 75])
 
 for i in range(int(n_iters_needed)):
     print("Iteration {} (out of {})".format(i, n_iters_needed))
@@ -177,6 +278,8 @@ for i in range(int(n_iters_needed)):
                   'icustay_seq'], axis=1)
     # drop unused columns
     df_vitals = df_vitals.drop(["subject_id", 'icustay_id'], axis=1)
+
+
     # round and decode age values
     df['age'] = round(df['age'], 0)
     df['age'] = [age - 210 if age > 289 else age for age in df['age']]
