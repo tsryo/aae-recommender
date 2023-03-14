@@ -1,15 +1,11 @@
-import torch
 import torch.nn as nn
-from docutils.nodes import inline
 
 from torch import optim
-
 from abc import ABC, abstractmethod
 from collections import OrderedDict, Counter
 import itertools as it
 import torch
 import scipy.sparse as sp
-import numpy as np
 import copy
 
 from sklearn.feature_extraction.text import CountVectorizer
@@ -304,13 +300,6 @@ class CountCondition(ConditionBase):
     def size_increment(self):
         return len(self.cv.vocabulary_)
 
-
-
-
-
-
-
-
 """ Three basic variants of conditioning
 1. Concatenation-based conditioning
 2. Conditional biasing
@@ -595,15 +584,14 @@ class ContinuousCondition(ConcatenationBasedConditioning):
                 copy.deepcopy(self.reduce, memo))
             memo[id_self] = _copy
         return _copy
+
     def fit(self, raw_inputs):
         """ Learn a vocabulary """
         flat_items = raw_inputs if self.reduce is None else list(it.chain.from_iterable(raw_inputs))
         self.embedding = nn.Identity()
-
         if self.use_cuda and self.embedding_on_gpu:
             # Put the embedding on GPU only when wanted
             self.embedding = self.embedding.cuda()
-
         self.optimizer = None
         return self
 
@@ -627,25 +615,22 @@ class ContinuousCondition(ConcatenationBasedConditioning):
         inputs = inputs.to(torch.float32)
         h = self.embedding(inputs)
         if self.reduce is not None:
-            # self.reduce in ['mean','sum','max']
             h = getattr(h, self.reduce)(1)
         if self.use_cuda:
             h = h.cuda()
         return h[:, None]
 
     def zero_grad(self):
+        # as the embedding is the identity matrix this becomes trivial
         return None
 
     def step(self):
-        # loss.backward() to be called before by client (such as in ae_step)
-        # The condition object can update its own parameters wrt global loss
+        # as the embedding is the identity matrix this becomes trivial
         return None
 
     def size_increment(self):
         return 1
 
-
-# idk whether the following is helpful in the end.
 
 class Condition(ConditionBase):
     """ A generic condition class.
