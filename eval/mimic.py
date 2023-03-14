@@ -370,8 +370,7 @@ def adjust_icd_text_defs_post_corrupt(corrupted_set):
         c_icd_codes = get_icd_code_from_index(corrupted_set.data[j], corrupted_set)
         c_code_defs = [re.sub(r'[^\w\s]', '', d_icd_code_defs[x].lower()) if x in d_icd_code_defs.keys() else '' for
                        x in c_icd_codes]
-        # limit to first 1000 characters (todo: see if can relax this)
-        corrupted_set.owner_attributes['ICD9_defs_txt'][c_hadm_id] = (' '.join(c_code_defs))[:1000]
+        corrupted_set.owner_attributes['ICD9_defs_txt'][c_hadm_id] = (' '.join(c_code_defs))
     return corrupted_set
 
 def log(*print_args, logfile=None):
@@ -435,7 +434,7 @@ def unpack_patients(patients, icd_code_defs = None):
             other_attributes[c_var][c_hadm_id] = patient[c_var]
         c_icd_codes = other_attributes['icd9_code_lst'][c_hadm_id]
         c_code_defs = [re.sub(r'[^\w\s]', '', d_icd_code_defs[x].lower()) if x in d_icd_code_defs.keys() else '' for x in c_icd_codes]
-        other_attributes['ICD9_defs_txt'][c_hadm_id] = (' '.join(c_code_defs))[:1000] # limit to first 1000 characters
+        other_attributes['ICD9_defs_txt'][c_hadm_id] = (' '.join(c_code_defs))
     # bag_of_codes and ids should have corresponding indices
     return bags_of_codes, ids, other_attributes, d_icd_code_defs
 
