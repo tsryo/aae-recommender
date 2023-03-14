@@ -19,7 +19,7 @@ from aaerec.transforms import lists2sparse
 from aaerec.evaluation import remove_non_missing, evaluate
 from aaerec.baselines import Countbased
 from aaerec.svd import SVDRecommender
-from aaerec.aae import AAERecommender, DecodingRecommender
+from aaerec.aae import AAERecommender
 from aaerec.vae import VAERecommender
 from aaerec.dae import DAERecommender
 from gensim.models.keyedvectors import KeyedVectors
@@ -36,20 +36,19 @@ from CONSTANTS import *
 # Set it to the Reuters RCV dataset
 DEBUG_LIMIT = None
 # These need to be implemented in evaluation.py
-METRICS = ['mrr', 'mrr@5', 'mrr@10', 'map', 'map@5', 'map@10', 'f1', 'f1@5', 'f1@10', 'maf1', 'maf1@5', 'maf1@10']
+METRICS = ['mrr', 'mrr@5', 'map', 'map@5', 'maf1', 'maf1@5']
 VECTORS = []
+# placeholder default hyperparams values - later get replaced with optimal hyperparam values chosen from list
+# (see lines defining MODELS_WITH_HYPERPARAMS)
 ae_params = {
     'n_code': 50,
     'n_epochs': 100,
-    # 'embedding': VECTORS,
     'batch_size': 100,
     'n_hidden': 100,
     'normalize_inputs': True,
 }
 vae_params = {
     'n_code': 50,
-    # VAE results get worse with more epochs in preliminary optimization
-    # (Pumed with threshold 50)
     'n_epochs': 50,
     'batch_size': 100,
     'n_hidden': 100,
@@ -58,8 +57,8 @@ vae_params = {
 
 # Metadata to use
 # optional conditions (ICD9 codes not optional)
+# commented out conditions can be used if compute resources permitting
 CONDITIONS = ConditionList([
-    # ('ICD9_defs_txt', PretrainedWordEmbeddingCondition(VECTORS)),
     ('gender', CategoricalCondition(embedding_dim=3, sparse=True, embedding_on_gpu=True)),
     ('ethnicity_grouped', CategoricalCondition(embedding_dim=7, sparse=True, embedding_on_gpu=True)),
     ('admission_type', CategoricalCondition(embedding_dim=5, sparse=True, embedding_on_gpu=True)),
@@ -257,8 +256,10 @@ CONDITIONS = ConditionList([
     # 'glucose_max_lst'
     # 'glucose_mean_lst'
 ])
+# get instantiated lower (after word embeddings are loaded)
 CONDITIONS_WITH_TEXT = None
 
+# init dict with text descriptions of each ICD9 code
 icd_code_defs = pd.read_csv(ICD_CODE_DEFS_PATH, sep='\t')
 d_icd_code_defs = {}
 dup_keys = []
@@ -273,35 +274,8 @@ for ii in range(len(icd_code_defs)):
         icd9_code = icd9_code[0:2] + '0' + icd9_code[2:]
     d_icd_code_defs[icd9_code] = c_code_row.long_title
 
-# Models without/with metadata
+# Models without/with metadata (empty init here, gets populated later in source)
 MODELS_WITH_HYPERPARAMS = []
-def prepare_evaluation(bags, test_size=0.1, n_items=None, min_count=None, drop=1):
-    """
-    Split data into train and dev set.
-    Build vocab on train set and applies it to both train and test set.
-    """
-    # Split 10% validation data, one submission per day is too much.
-    train_set, dev_set = bags.train_test_split(test_size=test_size)
-    # Builds vocabulary only on training set
-    # Limit of most frequent 50000 distinct items is for testing purposes
-    vocab, __counts = train_set.build_vocab(max_features=n_items,
-                                            min_count=min_count,
-                                            apply=False)
-
-    # Apply vocab (turn track ids into indices)
-    train_set = train_set.apply_vocab(vocab)
-    # Discard unknown tokens in the test set
-    dev_set = dev_set.apply_vocab(vocab)
-
-    # Drop one track off each playlist within test set
-    print("Drop parameter:", drop)
-    noisy, missing = corrupt_sets(dev_set.data, drop=drop)
-    assert len(noisy) == len(missing) == len(dev_set)
-    # Replace test data with corrupted data
-    dev_set.data = noisy
-
-    return train_set, dev_set, missing
-
 
 def normalize_conditional_data_bags(bags):
     for k in list(bags.owner_attributes.keys()):
@@ -517,89 +491,6 @@ def hyperparam_optimize(model, train_set, val_set, tunning_params= {'prior': ['g
         del best_params[metric]
         return best_params, best_metric_val, exp_grid_df
 
-# @param fold_index - run a specific fold of CV (-1 = run all folds)
-def main(min_count = 50, drop = 0.5, n_folds = 5, model_idx = -1, outfile = 'out.log', fold_index = -1):
-    """ Main function for training and evaluating AAE methods on MIMIC data """
-    print('drop = {}; min_count = {}, n_folds = {}, model_idx = {}'.format(drop, min_count, n_folds, model_idx))
-    print("Loading data from", DATA_PATH)
-    patients = load(DATA_PATH)
-    print("Unpacking MIMIC data...")
-    bags_of_patients, ids, side_info, d_icd_code_defs = unpack_patients(patients, icd_code_defs)  # with conditions
-    assert(len(set(ids)) == len(ids))
-    del patients
-    bags = Bags(bags_of_patients, ids, side_info)  # with conditions
-    log("Whole dataset:", logfile=outfile)
-
-    # all_ages = list(side_info['age'].values())
-
-    log(bags, logfile=outfile)
-    all_codes = [c for c_list in list(side_info['icd9_code_lst'].values()) for c in c_list]
-    t_codes = pd.value_counts(all_codes)
-    n_codes_uniq = len(t_codes)
-    n_codes_all = len(all_codes)
-    code_counts = pd.value_counts(all_codes)
-    # all_unique_codes = set(all_codes)
-    # all_unique_code_defs = set([cd for cd_list in list(side_info['ICD9_defs_txt'].values()) for cd in cd_list])
-
-    log("Total number of codes in current dataset = {}".format(n_codes_all), logfile=outfile)
-    log("Total number of unique codes in current dataset = {}".format(n_codes_uniq), logfile=outfile)
-
-    code_percentages = list(zip(code_counts,code_counts.index))
-    code_percentages = [ (val/n_codes_all, code) for val,code in code_percentages ]
-    code_percentages_accum = code_percentages
-    for i in range(len(code_percentages)):
-        if i > 0:
-            code_percentages_accum[i] = (code_percentages_accum[i][0] + code_percentages_accum[i-1][0], code_percentages_accum[i][1])
-        else:
-            code_percentages_accum[i] = (code_percentages_accum[i][0], code_percentages_accum[i][1])
-
-    for i in range(len(code_percentages_accum)):
-        c_code = code_percentages_accum[i][1]
-        c_percentage = code_percentages_accum[i][0]
-        c_def = d_icd_code_defs[c_code] if c_code in d_icd_code_defs.keys() else ''
-        log("{}\t#{}\tcode: {}\t( desc: {})".format(c_percentage, i+1, c_code, c_def), logfile=outfile)
-        if c_percentage >= 0.5:
-            log("first {} codes account for 50% of all code occurrences".format(i), logfile=outfile)
-            log("Remaining {} codes account for remaining 50% of all code occurrences".format(n_codes_uniq-i), logfile=outfile)
-            log( "Last 1000 codes account for only {}% of data".format((1-code_percentages_accum[n_codes_uniq-1000][0])*100), logfile=outfile)
-            break
-
-
-    log("drop = {}, min_count = {}".format(drop, min_count), logfile=outfile)
-    sets_to_try = MODELS_WITH_HYPERPARAMS if model_idx < 0 else [MODELS_WITH_HYPERPARAMS[model_idx]]
-    models_to_del = [i for i in range(len(MODELS_WITH_HYPERPARAMS)) if i != model_idx]
-    for i in list(reversed(models_to_del)):
-        del MODELS_WITH_HYPERPARAMS[i]
-    # del MODELS_WITH_HYPERPARAMS # somehow this causes line above with sets_to_try initialisation to fail..
-
-    for model, hyperparams_to_try in sets_to_try:
-        metrics_df = run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_to_try, split_sets_filename="splitsets.pkl", fold_index=fold_index)
-        metrics_df.to_csv('./{}_{}_{}.csv'.format(outfile, str(model)[0:48], fold_index), sep = '\t')
-
-# def main():
-#     """Uncomment to generate plots with histograms per variable"""
-#     print("Loading data from", DATA_PATH)
-#     patients = load(DATA_PATH)
-#     print("Unpacking MIMIC data...")
-#     plot_patient_hists(patients)
-
-# def main(min_count = 50, n_folds = 1, drop = 0.1, outfile = ''):
-#     """Uncomment to generate plots with perf metrics of models varying drop parameter"""
-#     outfile = '../test-run_{}.log'.format(datetime.now().strftime("%Y-%m-%d-%H:%M"))
-#     print("Loading data from", DATA_PATH)
-#     patients = load(DATA_PATH)
-#     print("Unpacking MIMIC data...")
-#
-#     bags_of_patients, ids, side_info = unpack_patients(patients)  # with conditions
-#     assert(len(set(ids)) == len(ids))
-#     del patients
-#     bags = Bags(bags_of_patients, ids, side_info)  # with conditions
-#
-#     log("Whole dataset:", logfile=outfile)
-#     log(bags, logfile=outfile)
-#     drop_vals = [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
-#     eval_different_drop_values(drop_vals, bags, min_count, n_folds, outfile)
-
 def eval_different_drop_values(drop_vals, bags, min_count, n_folds, outfile):
     metrics_df = None
     for drop in drop_vals:
@@ -644,6 +535,7 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_
         if c_fold != 0: # load from file trian/test/val sets and then delete them
             with (open(split_sets_filename, "rb")) as openfile:
                 train_sets, val_sets, test_sets, y_tests = pickle.load(openfile)
+        # if specified to run specific fold index, skip others
         if fold_index >= 0 and c_fold != fold_index:
             continue
         log("FOLD = {}".format(c_fold), logfile=outfile)
@@ -745,6 +637,62 @@ def save_object(obj, filename):
     with open(filename, 'wb') as outp:  # Overwrites any existing file.
         pickle.dump(obj, outp, pickle.HIGHEST_PROTOCOL)
 
+# @param fold_index - run a specific fold of CV (-1 = run all folds)
+# see lines at parser.add_argument for param details
+def main(min_count = 50, drop = 0.5, n_folds = 5, model_idx = -1, outfile = 'out.log', fold_index = -1):
+    """ Main function for training and evaluating AAE methods on MIMIC data """
+    print('drop = {}; min_count = {}, n_folds = {}, model_idx = {}'.format(drop, min_count, n_folds, model_idx))
+    print("Loading data from", DATA_PATH)
+    patients = load(DATA_PATH)
+    print("Unpacking MIMIC data...")
+    bags_of_patients, ids, side_info, d_icd_code_defs = unpack_patients(patients, icd_code_defs)  # with conditions
+    assert(len(set(ids)) == len(ids))
+    del patients
+    bags = Bags(bags_of_patients, ids, side_info)  # with conditions
+    log("Whole dataset:", logfile=outfile)
+
+    log(bags, logfile=outfile)
+    all_codes = [c for c_list in list(side_info['icd9_code_lst'].values()) for c in c_list]
+    t_codes = pd.value_counts(all_codes)
+    n_codes_uniq = len(t_codes)
+    n_codes_all = len(all_codes)
+    code_counts = pd.value_counts(all_codes)
+    # all_unique_codes = set(all_codes)
+    # all_unique_code_defs = set([cd for cd_list in list(side_info['ICD9_defs_txt'].values()) for cd in cd_list])
+
+    log("Total number of codes in current dataset = {}".format(n_codes_all), logfile=outfile)
+    log("Total number of unique codes in current dataset = {}".format(n_codes_uniq), logfile=outfile)
+
+    code_percentages = list(zip(code_counts,code_counts.index))
+    code_percentages = [ (val/n_codes_all, code) for val,code in code_percentages ]
+    code_percentages_accum = code_percentages
+    for i in range(len(code_percentages)):
+        if i > 0:
+            code_percentages_accum[i] = (code_percentages_accum[i][0] + code_percentages_accum[i-1][0], code_percentages_accum[i][1])
+        else:
+            code_percentages_accum[i] = (code_percentages_accum[i][0], code_percentages_accum[i][1])
+
+    for i in range(len(code_percentages_accum)):
+        c_code = code_percentages_accum[i][1]
+        c_percentage = code_percentages_accum[i][0]
+        c_def = d_icd_code_defs[c_code] if c_code in d_icd_code_defs.keys() else ''
+        log("{}\t#{}\tcode: {}\t( desc: {})".format(c_percentage, i+1, c_code, c_def), logfile=outfile)
+        if c_percentage >= 0.5:
+            log("first {} codes account for 50% of all code occurrences".format(i), logfile=outfile)
+            log("Remaining {} codes account for remaining 50% of all code occurrences".format(n_codes_uniq-i), logfile=outfile)
+            log( "Last 1000 codes account for only {}% of data".format((1-code_percentages_accum[n_codes_uniq-1000][0])*100), logfile=outfile)
+            break
+
+
+    log("drop = {}, min_count = {}".format(drop, min_count), logfile=outfile)
+    sets_to_try = MODELS_WITH_HYPERPARAMS if model_idx < 0 else [MODELS_WITH_HYPERPARAMS[model_idx]]
+    models_to_del = [i for i in range(len(MODELS_WITH_HYPERPARAMS)) if i != model_idx]
+    for i in list(reversed(models_to_del)):
+        del MODELS_WITH_HYPERPARAMS[i]
+
+    for model, hyperparams_to_try in sets_to_try:
+        metrics_df = run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_to_try, split_sets_filename="splitsets.pkl", fold_index=fold_index)
+        metrics_df.to_csv('./{}_{}_{}.csv'.format(outfile, str(model)[0:48], fold_index), sep = '\t')
 
 
 if __name__ == '__main__':

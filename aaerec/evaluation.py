@@ -69,53 +69,6 @@ class Metric(ABC):
     def __call__(self, y_true, y_pred, average=True):
         pass
 
-class F1_old(Metric):
-    def __init__(self, *args, **kwargs):
-        self.average = kwargs.pop('average', 'weighted')
-        super().__init__()
-
-
-    def __call__(self, y_true, y_pred):
-        precision = {}
-        recall = {}
-        threshold = {}
-        f1s = {}
-
-        nTPs = 0
-        nFPs = 0
-        nFNs = 0
-        for i in range(y_true.shape[1]):
-            if not any(y_true[:, i] == 1):
-                continue
-            precision[i], recall[i], threshold[i] = precision_recall_curve(y_true[:, i], y_pred[:, i])
-            best_threshold_idx = np.nanargmax([(2*(precision[i][x]*recall[i][x]))/(precision[i][x]+recall[i][x])  for x in range(len(precision[i]))])
-            best_threshold_f1_score = np.nanmax([(2*(precision[i][x]*recall[i][x]))/(precision[i][x]+recall[i][x]) for x in range(len(precision[i]))])
-            best_thresh = threshold[i][best_threshold_idx]
-            Ps = [1 if x >= best_thresh else  0 for x  in y_pred[:, i]]
-            c_tp = np.sum([1 if y_true[j,i] == 1 and Ps[j] == 1 else  0 for j  in range(len(y_true[:, i]))])
-            c_fp = np.sum([1 if y_true[j,i] == 0 and Ps[j] == 1 else  0 for j  in range(len(y_true[:, i]))])
-            c_fn = np.sum([1 if y_true[j,i] == 1 and Ps[j] == 0 else  0 for j  in range(len(y_true[:, i]))])
-            nTPs += c_tp
-            nFPs += c_fp
-            nFNs += c_fn
-            c_precision = c_tp / (c_tp + c_fp)
-            c_recall = c_tp / (c_tp + c_fn)
-            c_f1 = (2*c_precision*c_recall)/(c_precision+c_recall)
-            assert c_f1 == best_threshold_f1_score # sanity check
-            f1s[i] = c_f1
-
-        micro_precision = nTPs / (nTPs + nFPs)
-        micro_recall = nTPs / (nTPs + nFNs)
-        term_weights = np.array([np.sum(x) / np.sum(y_true) for x in np.transpose(y_true)])
-        term_weights = [ term_weights[x]  for x in np.where(term_weights > 0) ][0]
-
-        micro_f1 = (2 * micro_precision * micro_recall) / (micro_precision + micro_recall)
-        avg_f1 = np.mean(list(f1s.values()))
-        weighted_f1 = np.sum([ term_weights[i]*list(f1s.values())[i] for i in range(len(list(f1s.values())))])
-        f1_res = micro_f1 if self.average == 'micro' else weighted_f1
-        return f1_res, np.nanstd(list(f1s.values()))
-
-
 class RankingMetric(Metric):
     """ Base class for all ranking metrics
     may also be used on its own to quickly get ranking scores from Y_true,
@@ -190,24 +143,6 @@ class MAP(RankingMetric):
         else:
             return np.array([rm.average_precision(r) for r in rs])
 
-class F1(RankingMetric):
-    """ F1 score at k """
-    def __init__(self, k=None):
-        super().__init__(k=k)
-
-    def __call__(self, y_true, y_pred, average=True):
-        """
-        """
-        rs = super().__call__(y_true, y_pred)
-        k = self.k if self.k is not None else y_true.shape[1]
-        prec = [ precision_at_k(rs[i], k) for i in range(len(rs))]
-        rec = [ recall_at_k(rs[i], k, sum(y_true[i])) for i in range(len(rs))]
-        f1s = [ f1score(prec[i], rec[i]) for i in range(len(prec))]
-        if average:
-            return np.mean(f1s), np.std(f1s)
-        else:
-            return np.array(f1s)
-
 class MAF1(RankingMetric):
     """ Mean average F1 score at k """
     def __init__(self, k=None):
@@ -249,7 +184,7 @@ class P(RankingMetric):
 BOUNDED_METRICS = {
     # (bounded) ranking metrics
     '{}@{}'.format(M.__name__.lower(), k): M(k)
-    for M in [MRR, MAP, P, F1, MAF1] for k in [5, 10, 20]
+    for M in [MRR, MAP, P, MAF1] for k in [5, 10, 20]
 }
 BOUNDED_METRICS['P@1'] = P(1)
 
@@ -257,7 +192,7 @@ BOUNDED_METRICS['P@1'] = P(1)
 UNBOUNDED_METRICS = {
     # unbounded metrics
     M.__name__.lower(): M()
-    for M in [MRR, MAP, F1_old, F1, MAF1]
+    for M in [MRR, MAP, MAF1]
 }
 
 METRICS = { **BOUNDED_METRICS, **UNBOUNDED_METRICS }

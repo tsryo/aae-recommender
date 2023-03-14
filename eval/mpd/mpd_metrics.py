@@ -167,7 +167,7 @@ def aggregate_metrics(ground_truth, sub, k, candidates):
         cnt += 1
         if p not in sub:
             miss += 1
-            m = Metrics(0, 0, 0)  # TODO: make sure this is right
+            m = Metrics(0, 0, 0)
         else:
             m = get_all_metrics(ground_truth[p], sub[p], k)
         r_precision.append(m.r_precision)

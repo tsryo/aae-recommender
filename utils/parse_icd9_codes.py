@@ -1,31 +1,35 @@
 import pandas as pd
 import json
 import numpy as np
-
+from CONSTANTS import DATA_PATH, ICD_CODE_DEFS_PATH
+from eval.fiv import load
 import matplotlib.pyplot as plt
 
 SEPARATOR = ","
 ALL_TIMESERIES_MISSING_PLACEHOLDER = "*MISSING*"
 IN_DATA_PATH = "../../data/diagnoses_procedures_icd_icu_staydetail.csv"
-IN_DATA_PATH_ICUSTAY_DETAIL = "../../data/diagnoses_procedures_icd_icu_staydetail.csv"
 IN_DATA_PATH_VITALS = "../../data/vitals.csv"
 READM = True
+PLOT_FIGS = False
+GEN_VITALS_SUMMARY_TABLE = False
 
 print("Reading data from {}".format(IN_DATA_PATH))
 df = pd.read_csv(IN_DATA_PATH, sep=SEPARATOR, index_col=False)
 df_vitals = pd.read_csv(IN_DATA_PATH_VITALS, sep=SEPARATOR, index_col=False)
 
-#note: not all hadm_ids have vitals, remove them from our dataset
-vital_hadm_ids = set(list(df_vitals['hadm_id']))
+
 
 ### plotting reasons...
 from datetime import datetime
 import seaborn as sns
 sns.set_theme()
-#tips = sns.load_dataset("tips")
+
 
 
 df_vitals = df_vitals.sort_values(['hadm_id', 'charttime'], ascending=True)
+#note: not all hadm_ids have vitals, remove them from our dataset
+vital_hadm_ids = set(list(df_vitals['hadm_id']))
+
 df_vitals_new = None
 for hadm_id in list(vital_hadm_ids):
     c_df = df_vitals.iloc[df_vitals['hadm_id'].values == hadm_id]
@@ -42,20 +46,25 @@ for hadm_id in list(vital_hadm_ids):
     df_vitals_new = pd.concat([df_vitals_new, c_df])
 
     # Create a visualization
-
     plot_dir = '/mnt/c/Development/github/Python/plt/experiment/{}'
     plot_nm = plot_dir.format('lineplot.png')
     #sns.lmplot(data=c_df, x="time_mins", y="heartrate_min" )
 random10_hadms = list(set(df_vitals_new['hadm_id'].tolist()))[50:60]
 c_df = df_vitals_new[df_vitals_new['hadm_id'].isin(random10_hadms)]
+
+df_vitals = df_vitals_new
 #sns.set(rc={'figure.figsize': (20, 10)})
 from scipy.stats import rankdata
-c_df['hadm_id'] = rankdata(c_df['hadm_id'], method = 'dense')
+# c_df['hadm_id'] = rankdata(c_df['hadm_id'], method = 'dense')
 
-fig = sns.relplot(data=c_df, x="time_mins", y="heartrate_min", kind="line", hue = 'hadm_id', size = 8, aspect = 2,  palette = sns.color_palette("husl", 10))
+if PLOT_FIGS:
+    c_df['hadm_id'] = rankdata(c_df['hadm_id'], method='dense')
+    fig = sns.relplot(data=c_df, x="time_mins", y="heartrate_min", kind="line", hue = 'hadm_id', size = 8, aspect = 2,  palette = sns.color_palette("husl", 10))
 
-fig.savefig(plot_nm, dpi = 500)
-plt.show()
+    fig.savefig(plot_nm, dpi = 500)
+    plt.show()
+
+
 ## summarize idea - for each timeseries: fit a linear model on metric over time per patient
 ###  something like
 ## n_measurements, n_missings, median, Q1, Q3,
@@ -65,58 +74,59 @@ table_cols = ['heartrate_min', 'heartrate_max', 'heartrate_mean', 'sysbp_min', '
        'resprate_mean', 'tempc_min', 'tempc_max', 'tempc_mean', 'spo2_min',
        'spo2_max', 'spo2_mean', 'glucose_min', 'glucose_max', 'glucose_mean']
 vitals_table = None
-#patients = load(DATA_PATH)
-pat_cols = [ #'gender', 'los_hospital', 'age', #'ethnicity_grouped',  'admission_type', 'seq_num_len', 'icd9_code_lst', 'los_icu_lst',
-            'heartrate_min_lst_mm', 'heartrate_max_lst_mm', 'heartrate_mean_lst_mm',
+
+pat_cols = [ 'heartrate_min_lst_mm', 'heartrate_max_lst_mm', 'heartrate_mean_lst_mm',
             'sysbp_min_lst_mm', 'sysbp_max_lst_mm', 'sysbp_mean_lst_mm', 'diasbp_min_lst_mm',
             'diasbp_max_lst_mm', 'diasbp_mean_lst_mm', 'meanbp_min_lst_mm', 'meanbp_max_lst_mm', 'meanbp_mean_lst_mm',
             'resprate_min_lst_mm', 'resprate_max_lst_mm', 'resprate_mean_lst_mm', 'tempc_min_lst_mm', 'tempc_max_lst_mm',
             'tempc_mean_lst_mm', 'spo2_min_lst_mm', 'spo2_max_lst_mm', 'spo2_mean_lst_mm', 'glucose_min_lst_mm', 'glucose_max_lst_mm', 'glucose_mean_lst_mm'
              ]
-for p_col in pat_cols:
-    vals = [x[p_col] for x in patients]
-    print(p_col)
-    print((sum(vals)/49002)*100)
+if GEN_VITALS_SUMMARY_TABLE:
+    patients = load(DATA_PATH)
+    for p_col in pat_cols:
+        vals = [x[p_col] for x in patients]
+        print(p_col)
+        print((sum(vals)/49002)*100)
 
-ages = [x['icd9_code_lst'] for x in patients]
-ages = [y for x in ages for y in x]
-xxxx = pd.Series(ages).value_counts()[-50:]
-rare_codes = None
-for c_key in xxxx.keys().tolist():
-    is_diag = 'd_' in c_key
-    type_filter = 'DIAGNOSE' if is_diag else 'PROCEDURE'
-    c_df = icd_code_defs[icd_code_defs['type'] == type_filter]
-    c_df = c_df[c_df['icd9_code'] == c_key[2:]]
-    rare_codes = pd.concat([c_df, rare_codes])
+    icd_code_defs = pd.read_csv(ICD_CODE_DEFS_PATH, sep='\t')
+    ages = [x['icd9_code_lst'] for x in patients]
+    ages = [y for x in ages for y in x]
+    xxxx = pd.Series(ages).value_counts()[-50:]
+    rare_codes = None
+    for c_key in xxxx.keys().tolist():
+        is_diag = 'd_' in c_key
+        type_filter = 'DIAGNOSE' if is_diag else 'PROCEDURE'
+        c_df = icd_code_defs[icd_code_defs['type'] == type_filter]
+        c_df = c_df[c_df['icd9_code'] == c_key[2:]]
+        rare_codes = pd.concat([c_df, rare_codes])
 
-np.where(np.isnan(ages))
-np.nanmedian(ages)
-np.nanquantile(ages,0.25)
-np.nanquantile(ages,0.75)
+    np.where(np.isnan(ages))
+    np.nanmedian(ages)
+    np.nanquantile(ages,0.25)
+    np.nanquantile(ages,0.75)
 
-for t_col in table_cols:
-    c_vals = df_vitals[t_col].values
-    c_row = {
-        "n_measurements": len(c_vals)-len(np.where(np.isnan(c_vals))[0]),
-        "med" : np.nanmedian(c_vals),
-        "q1" : np.nanquantile(c_vals, q = 0.25),
-        "q3" : np.nanquantile(c_vals, q=0.75),
-        "vital": t_col,
-    }
-    c_row = pd.DataFrame(pd.Series(c_row))
-    c_row = pd.DataFrame.transpose(c_row)
-    vitals_table = pd.concat([vitals_table, c_row])
+    for t_col in table_cols:
+        c_vals = df_vitals[t_col].values
+        c_row = {
+            "n_measurements": len(c_vals)-len(np.where(np.isnan(c_vals))[0]),
+            "med" : np.nanmedian(c_vals),
+            "q1" : np.nanquantile(c_vals, q = 0.25),
+            "q3" : np.nanquantile(c_vals, q=0.75),
+            "vital": t_col,
+        }
+        c_row = pd.DataFrame(pd.Series(c_row))
+        c_row = pd.DataFrame.transpose(c_row)
+        vitals_table = pd.concat([vitals_table, c_row])
 
-vitals_table.to_csv('vitals_table.csv', sep = '\t')
+    vitals_table.to_csv('vitals_table.csv', sep = '\t')
 
-c_df.columns
+    c_df.columns
 
-df_conditions = None #pd.read_csv(IN_DATA_PATH_ICUSTAY_DETAIL, sep=SEPARATOR, index_col=False)
+
+df_conditions = None
 print(df.head())
 
 
-# todo: print how many you  remove
-#print()
 icd_all = list(df['icd9_code'].values)
 icd_diag = [x for x in icd_all if type(x) != float and x[0:2] == 'd_']
 icd_proc = [x for x in icd_all if type(x) != float and x[0:2] == 'p_']
@@ -170,8 +180,7 @@ def aggregate_vars_per_id(id_var, aggr_vars, df, drop_id_dups=True, drop_aggr_du
         df = df.drop_duplicates(subset=id_var, keep="first")
     return df
 
-
-def impute_timeseries_values(lst_vals):
+def impute_timeseries_values(lst_vals, time_mins):
     nan_idxs = np.where(np.isnan(lst_vals))[0]
     if len(nan_idxs) == len(lst_vals):
         return [ALL_TIMESERIES_MISSING_PLACEHOLDER] * len(lst_vals)  # cant impute, set them to 0s for now and mark them later
@@ -179,6 +188,9 @@ def impute_timeseries_values(lst_vals):
         return lst_vals
     last_non_nan_idx = np.where(~np.isnan(lst_vals))[0][-1]
     first_non_nan_idx = np.where(~np.isnan(lst_vals))[0][0]
+    last_non_nan_time = time_mins[last_non_nan_idx]
+    first_non_nan_time = time_mins[first_non_nan_idx]
+
     for i in nan_idxs:
         imp_val = np.nan
         if i > last_non_nan_idx:
@@ -188,17 +200,25 @@ def impute_timeseries_values(lst_vals):
         else:
             next_non_nan_idx = np.where(~np.isnan(lst_vals[i + 1:]))[0][0] + i + 1
             prev_non_nan_idx = np.where(~np.isnan(lst_vals[:i]))[0][-1]
-            imp_val = (lst_vals[prev_non_nan_idx] + lst_vals[next_non_nan_idx]) / 2
+            c_nan_time = time_mins[i]
+            next_non_nan_time = time_mins[next_non_nan_idx]
+            prev_non_nan_time = time_mins[prev_non_nan_idx]
+            time_dist_next = next_non_nan_time - c_nan_time
+            time_dist_prev = c_nan_time - prev_non_nan_time
+            total_time_diff = time_dist_prev +  time_dist_next
+            val_weight_next = (total_time_diff - time_dist_next) / total_time_diff
+            val_weight_prev = (total_time_diff-time_dist_prev)/total_time_diff
+
+            imp_val = (lst_vals[prev_non_nan_idx]*val_weight_prev + lst_vals[next_non_nan_idx]*val_weight_next)
         lst_vals[i] = imp_val
     return lst_vals
-
 
 def impute_timeseries_columns(cols, df):
     for col in cols:
         print("Imputing series for column {}".format(col))
-        df[col] = [impute_timeseries_values(x) for x in df[col]]
+        for c_row in range(0,df.shape[0]):
+            df[col].iloc[c_row] = impute_timeseries_values(df[col].iloc[c_row], df['time_mins_lst'].iloc[c_row])
     return df
-
 
 def add_features_mark_missing_series(cols, df):
     for col in cols:
@@ -228,6 +248,7 @@ def standardize_cap_and_normalize_cols(cols, df, sd_cap=10):
     return df
 
 
+
 # todo: consider using actual charttime differences between each measurement instance as X-axis
 slope_fn = lambda y: np.polyfit(range(len(y)), y, 1)[0] if len(y) > 1 else np.mean(y)
 delta_fn = lambda x: sum([x[i - 1] - x[i] for i in range(1, len(x))]) / (len(x) - 1) if len(x) > 1 else np.mean(x)
@@ -247,14 +268,11 @@ len(N_icd_proc_codes_all)
 len(set(N_icd_proc_codes_all))
 icd_val_counts = pd.value_counts(all_icds)
 icds_more_than50_occurs = [ x for x in icd_val_counts.to_list() if x >= 50]
-# N_icd_diag_codes all unique =
-# N_icd_diag_codes adults =
-# N_idc_diag_codes adults unique =
-#
-# N_icd_proc_codes all =
-# N_icd_proc_codes all unique =
-# N_icd_proc_codes adults =
-# N_icd_proc_codes adults unique =
+
+
+
+# Main scipt logic - iteratively load, parse and save records from csv to json format
+# merges patient admisison vitals with icd code list + demographics data
 
 n_iters_needed = np.ceil(len(all_hadm_ids)/READ_BUFFER_SIZE)
 
@@ -270,7 +288,7 @@ np.percentile(icd_per_admission, [25, 75])
 for i in range(int(n_iters_needed)):
     print("Iteration {} (out of {})".format(i, n_iters_needed))
     range_upper_bound = int((i*READ_BUFFER_SIZE + READ_BUFFER_SIZE)) if i != int(n_iters_needed)-1 else len(all_hadm_ids)
-    hadm_ids = [all_hadm_ids[i] for i in list(range(int((i*READ_BUFFER_SIZE)), range_upper_bound))] # debug hack
+    hadm_ids = [all_hadm_ids[i] for i in list(range(int((i*READ_BUFFER_SIZE)), range_upper_bound))]
     df_vitals = df_vitals_cpy.loc[df_vitals_cpy['hadm_id'].isin(hadm_ids)]
     df = df_cpy.loc[df_cpy['hadm_id'].isin(hadm_ids)]
     df = df.drop(['subject_id', 'icustay_id', 'dod', 'admittime', 'dischtime',
@@ -293,8 +311,7 @@ for i in range(int(n_iters_needed)):
 
         df_vitals = standardize_cap_and_normalize_cols(vitals_columns_to_aggr, df_vitals, sd_cap=10)
         vitals_columns_aggregated = [x + "_lst" for x in vitals_columns_to_aggr]
-        df_vitals = aggregate_vars_per_id("hadm_id", vitals_columns_to_aggr, df_vitals)
-        # todo:  remove cols with more than x% missing data
+        df_vitals = aggregate_vars_per_id("hadm_id", [*vitals_columns_to_aggr, 'time_mins'], df_vitals)
         df_vitals = impute_timeseries_columns(vitals_columns_aggregated, df_vitals)
         df_vitals = append_column_aggregates(vitals_columns_aggregated, aggr_fns_d, df_vitals)
         df_vitals = add_features_mark_missing_series(vitals_columns_aggregated, df_vitals)
@@ -318,7 +335,7 @@ for i in range(int(n_iters_needed)):
     patients = df.T.to_dict()
 
     # serialize in json
-    out_data_path = IN_DATA_PATH[:-len('.csv')] + '_debug_2048_x28_12.json'
+    out_data_path = IN_DATA_PATH[:-len('.csv')] + '_all.json'
     print("Writing data to {}".format(out_data_path))
     with open(out_data_path, "a") as fp:
         for p in patients.values():

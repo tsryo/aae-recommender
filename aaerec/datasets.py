@@ -459,7 +459,6 @@ class Bags(object):
         return self
 
     def inflate(self, factor):
-        # TODO FIXME
         """
         Inflates the bag by injecting 'factor' repetitions of the current data (and respective owner) into the bag.
 
