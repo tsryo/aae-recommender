@@ -1,5 +1,5 @@
 import linecache
-from encodings.punycode import selective_find
+# from encodings.punycode import selective_find
 
 import numpy as np
 import torch.nn as nn
@@ -73,7 +73,17 @@ def average_precision(r):
     if not out:
         return 0.
     return np.mean(out)
-
+def average_recall(r, all_pos_num):
+    """Score is average recall
+    Relevance is binary (nonzero is relevant).
+    Returns:
+        Average recall
+    """
+    r = np.asarray(r)
+    out = [recall_at_k(r, k + 1, all_pos_num) for k in range(r.size) if r[k]]
+    if not out:
+        return 0.
+    return np.mean(out)
 
 def mean_average_precision(rs):
     """Score is mean average precision
@@ -82,6 +92,14 @@ def mean_average_precision(rs):
         Mean average precision
     """
     return np.mean([average_precision(r) for r in rs])
+
+def mean_average_recall(rs):
+    """Score is mean average recall
+    Relevance is binary (nonzero is relevant).
+    Returns:
+        Mean average recall
+    """
+    return np.mean([average_recall(r) for r in rs])
 
 
 def dcg_at_k(r, k, method=1):

@@ -47,9 +47,8 @@ class EmbeddedVectorizer(TfidfVectorizer):
         embedding: V x D embedding matrix
         index2word: list of words with indices matching V
         """
+        super(EmbeddedVectorizer, self).__init__(vocabulary=index2word, **kwargs)
         self.embedding = embedding
-        super(EmbeddedVectorizer, self).__init__(self, vocabulary=index2word,
-                                                 **kwargs)
 
     def fit(self, raw_documents, y=None):
         super(EmbeddedVectorizer, self).fit(raw_documents)
@@ -64,9 +63,6 @@ class EmbeddedVectorizer(TfidfVectorizer):
     def fit_transform(self, raw_documents, y=None):
         return self.fit(raw_documents, y).transform(raw_documents, y)
 
-    def __repr__(self):
-        return f"Embedded Vectorizer with embedding shape {self.embedding.shape}"
-
 
 class GensimEmbeddedVectorizer(EmbeddedVectorizer):
     """
@@ -80,10 +76,9 @@ class GensimEmbeddedVectorizer(EmbeddedVectorizer):
         ---------
         `gensim_vectors` is expected to have index2word and syn0 defined
         """
-        index2word = gensim_vectors.index2word
+        index2word = gensim_vectors.index_to_key
         embedding = gensim_vectors.vectors
+        self.gensim_vectors = gensim_vectors
         super(GensimEmbeddedVectorizer, self).__init__(embedding,
                                                        index2word,
                                                        **kwargs)
-    def __repr__(self):
-        return "Gensim " + super().__repr__()

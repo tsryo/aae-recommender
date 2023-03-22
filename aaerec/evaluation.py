@@ -5,16 +5,19 @@ import random
 import sys
 from abc import ABC, abstractmethod
 from sklearn.preprocessing import minmax_scale
+from sklearn.metrics import f1_score, confusion_matrix, precision_recall_curve, multilabel_confusion_matrix
 import numpy as np
 import scipy.sparse as sp
+from irgan.utils import precision_at_k, recall_at_k
+from irgan.utils import F1 as f1score
+from random import choices
+from torch.nn.functional import threshold
+
 from . import rank_metrics_with_std as rm
 from .datasets import corrupt_sets
 from .transforms import lists2sparse
-try:
-    import wandb
-    wandb_is_available = True
-except ImportError:
-    wandb_is_available = False
+from .rank_metrics_with_std import r_precision
+from aaerec.rank_metrics_with_std import mean_average_precision, mean_average_recall, mean_average_f1
 
 
 def argtopk(X, k):
@@ -65,7 +68,6 @@ class Metric(ABC):
     @abstractmethod
     def __call__(self, y_true, y_pred, average=True):
         pass
-
 
 class RankingMetric(Metric):
     """ Base class for all ranking metrics
@@ -141,6 +143,22 @@ class MAP(RankingMetric):
         else:
             return np.array([rm.average_precision(r) for r in rs])
 
+class MAF1(RankingMetric):
+    """ Mean average F1 score at k """
+    def __init__(self, k=None):
+        super().__init__(k=k)
+
+    def __call__(self, y_true, y_pred, average=True):
+        """
+        """
+        rs = super().__call__(y_true, y_pred)
+        k = self.k if self.k is not None else y_true.shape[1]
+        # map, map_std = mean_average_precision(rs)
+        # mar, mar_std = mean_average_recall(rs)
+        # rec = [ recall_at_k(rs[i], k, sum(y_true[i])) for i in range(len(rs))]
+        all_pos_nums = np.array([sum(y_true[i]) for i in range(y_true.shape[0])])
+        maf1, maf1_std = mean_average_f1(rs, all_pos_nums)
+        return maf1, maf1_std
 
 class P(RankingMetric):
     def __init__(self, k=None):
@@ -166,7 +184,7 @@ class P(RankingMetric):
 BOUNDED_METRICS = {
     # (bounded) ranking metrics
     '{}@{}'.format(M.__name__.lower(), k): M(k)
-    for M in [MRR, MAP, P] for k in [5, 10, 20]
+    for M in [MRR, MAP, P, MAF1] for k in [5, 10, 20]
 }
 BOUNDED_METRICS['P@1'] = P(1)
 
@@ -174,7 +192,7 @@ BOUNDED_METRICS['P@1'] = P(1)
 UNBOUNDED_METRICS = {
     # unbounded metrics
     M.__name__.lower(): M()
-    for M in [MRR, MAP]
+    for M in [MRR, MAP, MAF1]
 }
 
 METRICS = { **BOUNDED_METRICS, **UNBOUNDED_METRICS }
@@ -218,7 +236,7 @@ def evaluate(ground_truth, predictions, metrics, batch_size=None):
         # Average later
         results_per_metric = [[] for _ in range(len(metrics))]
         for start in range(0, n_samples, batch_size):
-            end = min(start + batch_size, n_samples)
+            end = min(start + batch_size, n_samples) 
             pred_batch = predictions[start:end, :]
             gold_batch = ground_truth[start:end, :]
             if sp.issparse(pred_batch):
@@ -278,12 +296,6 @@ class Evaluation(object):
 
     def setup(self, seed=42, min_elements=1, max_features=None,
               min_count=None, drop=1):
-
-        self.min_elements = min_elements
-        self.max_features = max_features
-        self.min_count = min_count
-        self.drop = drop
-
         # we could specify split criterion and drop choice here
         """ Splits and corrupts the data accordion to criterion """
         log_fh = maybe_open(self.logfile)
@@ -307,7 +319,6 @@ class Evaluation(object):
         print("Train:", train_set, file=log_fh)
         print("Test:", test_set, file=log_fh)
         print("Drop parameter:", drop)
-        print("Drop parameter:", drop, file=log_fh)
 
         noisy, missing = corrupt_sets(test_set.data, drop=drop)
 
@@ -340,23 +351,13 @@ class Evaluation(object):
             sp.save_npz(gold_path, self.y_test)
 
         for recommender in recommenders:
-            if wandb_is_available:
-                run = wandb.init(project="aaerec", reinit=True)
-                wandb.config.dataset = self.dataset
-                wandb.config.year = self.year
-                wandb.config.min_elements = self.min_elements
-                wandb.config.max_features = self.max_features
-                wandb.config.min_count = self.min_count
-                wandb.config.drop = self.drop
-                wandb.config.model_class = recommender.__class__.__name__
-                for attr, value in vars(recommender).items():
-                    setattr(wandb.config, attr, value)
             log_fh = maybe_open(self.logfile)
             print(recommender, file=log_fh)
             maybe_close(log_fh)
             train_set = self.train_set.clone()
             test_set = self.test_set.clone()
             t_0 = timer()
+            # DONE FIXME copy.deepcopy is not enough!
             recommender.train(train_set)
             log_fh = maybe_open(self.logfile)
             print("Training took {} seconds."
@@ -393,15 +394,10 @@ class Evaluation(object):
             for metric, (mean, std) in zip(self.metrics, results):
                 print("- {}: {} ({})".format(metric, mean, std),
                       file=log_fh)
-                if wandb_is_available:
-                    wandb.log({metric: mean, metric+"-SD": std})
-
             print("\nOverall time: {} seconds."
                   .format(timedelta(seconds=timer()-t_0)), file=log_fh)
             print('-' * 79, file=log_fh)
             maybe_close(log_fh)
-            if wandb_is_available:
-                run.finish()
 
 
 if __name__ == '__main__':

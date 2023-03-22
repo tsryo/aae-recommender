@@ -10,6 +10,7 @@ import pandas as pd
 
 
 from sklearn.model_selection import train_test_split
+from sklearn.model_selection import KFold
 from collections import defaultdict
 try:
     from .transforms import lists2sparse, sparse2lists
@@ -99,7 +100,12 @@ def split_set(s, criterion):
         todrop = {e for e in s if criterion(e)}
     elif type(criterion) == float:
         assert criterion > 0 and criterion < 1, "Float not bounded in (0,1)"
-        todrop = {e for e in s if random.random() < criterion}
+        n_elems_to_drop = len(s)*criterion
+        remainder = n_elems_to_drop - np.floor(n_elems_to_drop)
+        should_round_up = random.random() >= 1-remainder
+        n_elems_to_drop = np.ceil(n_elems_to_drop) if should_round_up else np.floor(n_elems_to_drop)
+        todrop = random.sample(s, int(n_elems_to_drop))
+        # todrop = {e for e in s if random.random() < criterion}
     elif type(criterion) == int:
         try:
             todrop = random.sample(s, criterion)
@@ -173,13 +179,18 @@ class Bags(object):
         # consumes performance
         # self.index2token = invert_mapping(vocab)
 
-    def clone(self):
-        """ Creates a really deep copy """
-        data = [[t for t in b] for b in self.data]
-        bag_owners = [o for o in self.bag_owners]
+    def clone(self, start_from=0, n_items=None):
+        """ Creates a really deep copy.
+            @param start_from - (Optional) specify from which item to start cloning (default is 0)
+            @param n_items - (Optional) specify how many items to clone from original object (default is all)
+        """
+        n_items = len(self.data) if n_items is None else n_items + start_from
+        data = [[t for t in self.data[b]] for b in range(start_from, n_items)]
+        bag_owners = [self.bag_owners[o] for o in range(start_from, n_items)]
         if self.owner_attributes is not None:
-            owner_attributes = {attr: {token: value for token, value in value_by_token.items()}
-                                for attr, value_by_token in self.owner_attributes.items()}
+            owner_attributes = {list(self.owner_attributes.keys())[i]: {list(list(self.owner_attributes.items())[i][1].keys())[j]: list(list(self.owner_attributes.items())[i][1].values())[j]
+                                                                        for j in range(start_from, n_items)}
+                                for i in range(len(self.owner_attributes.items()))}
 
         return Bags(data, bag_owners, owner_attributes=owner_attributes)
 
@@ -241,7 +252,7 @@ class Bags(object):
         """
         # loading
 
-        df = pd.read_csv(path, sep="\t", dtype=str, error_bad_lines=False)
+        df = pd.read_csv(path, sep=",", dtype=str, error_bad_lines=False)
         df = df.fillna("")
 
         set_owners = df[owner_str].values
@@ -322,7 +333,7 @@ class Bags(object):
 
         return bags
 
-    def train_test_split(self, on_year=None, **split_params):
+    def train_test_split(self, on_year=None, n_folds = 1, **split_params):
         """ Returns one training bag instance and one test bag instance.
         Builds the vocabulary from the training set.
 
@@ -342,14 +353,75 @@ class Bags(object):
             split = train_test_split(self.data, self.bag_owners, **split_params)
             train_data, test_data, train_owners, test_owners = split
         print("{} train, {} test documents.".format(len(train_data), len(test_data)))
-        metadata_columns = list(self.owner_attributes.keys())
-        train_attributes = {k: {owner: self.owner_attributes[k][owner] for owner in
+        if self.owner_attributes is not None:
+            metadata_columns = list(self.owner_attributes.keys())
+            train_attributes = {k: {owner: self.owner_attributes[k][owner] for owner in
                                 train_owners} for k in metadata_columns}
-        test_attributes = {k: {owner: self.owner_attributes[k][owner] for owner in
+            test_attributes = {k: {owner: self.owner_attributes[k][owner] for owner in
                                test_owners} for k in metadata_columns}
+        else:
+            train_attributes = test_attributes = None
         train_set = Bags(train_data, train_owners, owner_attributes=train_attributes)
         test_set = Bags(test_data, test_owners, owner_attributes=test_attributes)
         return train_set, test_set
+
+    def create_kfolds_train_test(self, n_folds = 1):
+        """
+        """
+        if n_folds == 1:
+            train_set, test_set = self.train_test_split()
+            return [train_set], [test_set]
+
+        kf = KFold(n_folds)
+        folds = kf.split(self.data)
+        fold_idxs = [(train_idx, test_idx) for train_idx,test_idx in folds]
+        train_sets,  test_sets = [], []
+        for c_fold in range(len(fold_idxs)):
+            c_train_idxs, c_test_idxs = fold_idxs[c_fold]
+            train_data = [self.data[x] for x in c_train_idxs]
+            test_data = [self.data[x] for x in c_test_idxs]
+            train_owners = [self.bag_owners[x] for x in c_train_idxs]
+            test_owners = [self.bag_owners[x] for x in c_test_idxs]
+            print("fold {} ; {} train, {} test documents.".format(c_fold, len(train_data), len(test_data)))
+            if self.owner_attributes is not None:
+                metadata_columns = list(self.owner_attributes.keys())
+                train_attributes = {k: {owner: self.owner_attributes[k][owner] for owner in
+                                    train_owners} for k in metadata_columns}
+                test_attributes = {k: {owner: self.owner_attributes[k][owner] for owner in
+                                   test_owners} for k in metadata_columns}
+            else:
+                train_attributes = test_attributes = None
+            train_set = Bags(train_data, train_owners, owner_attributes=train_attributes)
+            test_set = Bags(test_data, test_owners, owner_attributes=test_attributes)
+            train_sets.append(train_set)
+            test_sets.append(test_set)
+
+        return train_sets, test_sets
+
+    def create_kfold_train_validate_test(self, n_folds = 1):
+        """invokes train_test_split but further splits test set into validate and test sets in a 1:1 ratio"""
+        train_sets, test_sets = self.create_kfolds_train_test(n_folds = n_folds)
+        # use first half of "test_set" as validate set, and second half as true test set
+        val_sets, new_test_sets = [], []
+        for i in range(n_folds):
+            test_set = test_sets[i]
+            idx_splt = int(np.floor(len(test_set)/2))
+            idx_splt2 = int(np.ceil(len(test_set)/2))
+            validate_set = test_set.clone(start_from=0, n_items=idx_splt)
+            test_set = test_set.clone(start_from=idx_splt, n_items=idx_splt2)
+            new_test_sets.append(test_set)
+            val_sets.append(validate_set)
+
+        return train_sets, val_sets, new_test_sets
+    def train_validate_test_split(self, on_year=None, **split_params):
+        """invokes train_test_split but further splits test set into validate and test sets in a 1:1 ratio"""
+        train_set, test_set = self.train_test_split(on_year=on_year, **split_params)
+        # use first half of "test_set" as validate set, and second half as true test set
+        idx_splt = int(np.floor(len(test_set)/2))
+        idx_splt2 = int(np.ceil(len(test_set)/2))
+        validate_set = test_set.clone(start_from=0, n_items=idx_splt)
+        test_set = test_set.clone(start_from=idx_splt, n_items=idx_splt2)
+        return train_set, validate_set, test_set
 
     def build_vocab(self, min_count=None, max_features=None, apply=True):
         """
@@ -387,7 +459,6 @@ class Bags(object):
         return self
 
     def inflate(self, factor):
-        # TODO FIXME
         """
         Inflates the bag by injecting 'factor' repetitions of the current data (and respective owner) into the bag.
 
@@ -422,19 +493,22 @@ class BagsWithVocab(Bags):
         # array of tokens which acts as reverse vocab
         self.index2token = {v: k for k, v in vocab.items()}
 
-    def clone(self):
+    def clone(self, start_from=0, n_items=None):
         """ Creates a really deep copy """
         # safe cloning of an instance
         # deepcopy is NOT enough
-        data = [[t for t in b] for b in self.data]
+        n_items = len(self.data) if n_items is None else n_items + start_from
+        data = [[t for t in self.data[b]] for b in range(start_from, n_items)]
         vocab = {k: v for k, v in self.vocab.items()}
-        bag_owners = [o for o in self.bag_owners]
+        bag_owners = [self.bag_owners[o] for o in range(start_from, n_items)]
+        owner_attributes = None
         if self.owner_attributes is not None:
-            attributes = {attr: {token: value for token, value in value_by_token.items()}
-                          for attr, value_by_token in self.owner_attributes.items()}
+            owner_attributes = {list(self.owner_attributes.keys())[i]: {list(list(self.owner_attributes.items())[i][1].keys())[j]: list(list(self.owner_attributes.items())[i][1].values())[j]
+                                                                        for j in range(start_from, n_items)}
+                                for i in range(len(self.owner_attributes.items()))}
 
         return BagsWithVocab(data, vocab, owners=bag_owners,
-                             attributes=attributes)
+                             attributes=owner_attributes)
 
     def build_vocab(self, min_count=None, max_features=None, apply=True):
         """ Override to prevent errors like building vocab of indices """

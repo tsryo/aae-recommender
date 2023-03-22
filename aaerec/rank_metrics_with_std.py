@@ -8,6 +8,7 @@ http://hal.archives-ouvertes.fr/docs/00/72/67/60/PDF/07-busa-fekete.pdf
 Learning to Rank for Information Retrieval (Tie-Yan Liu)
 """
 import numpy as np
+from irgan.utils import average_recall, F1
 
 
 def mean_reciprocal_rank(rs, average=True):
@@ -40,7 +41,10 @@ def mean_reciprocal_rank(rs, average=True):
     else:
         return mrrs
 
-
+# look at : https://github.com/lgalke/mpd-aae-recommender/blob/master/mpd_metrics.py
+# make k = number of predictions
+# todo: make sure the predictions are coming out with the items themselsves and if its continious values try to re-configure it
+# could be that you are seeing tf-idf instead of 0s and 1s
 def r_precision(r):
     """Score is precision after all relevant documents have been retrieved
 
@@ -153,6 +157,37 @@ def mean_average_precision(rs):
     aps = np.array([average_precision(r) for r in rs])
     return aps.mean(), aps.std()
 
+def mean_average_recall(rs, all_pos_nums):
+    """Score is mean average recall
+
+    Relevance is binary (nonzero is relevant)
+
+    Args:
+        rs: Iterator of relevance scores (list or numpy) in rank order
+            (first element is the first item)
+
+    Returns:
+        Mean average recall
+    """
+    ars = np.array([average_recall(rs[i], all_pos_nums[i]) for i in range(len(rs))])
+    return ars.mean(), ars.std()
+
+def mean_average_f1(rs, all_pos_nums):
+    """Score is mean average f1
+
+    Relevance is binary (nonzero is relevant)
+
+    Args:
+        rs: Iterator of relevance scores (list or numpy) in rank order
+            (first element is the first item)
+
+    Returns:
+        Mean average f1
+    """
+    aps = [average_precision(r) for r in rs]
+    ars = [average_recall(rs[i], all_pos_nums[i]) for i in range(len(all_pos_nums))]
+    af1s = np.array([F1(aps[i], ars[i]) for i in range(len(aps))])
+    return af1s.mean(), af1s.std()
 
 def dcg_at_k(r, k, method=0):
     """Score is discounted cumulative gain (dcg)

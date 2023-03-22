@@ -18,6 +18,9 @@ import scipy.sparse as sp
 from joblib import Parallel, delayed
 from gensim.models.keyedvectors import KeyedVectors
 
+# Imports are broken, you can quickfix via symlink
+# cd eval/mpd/; ln -s ../../aaerec aaerec
+
 from aaerec.datasets import Bags, corrupt_sets
 from aaerec.transforms import lists2sparse
 from aaerec.evaluation import remove_non_missing, evaluate
@@ -28,58 +31,56 @@ from aaerec.condition import ConditionList, PretrainedWordEmbeddingCondition, Ca
 from aaerec.vae import VAERecommender
 from aaerec.dae import DAERecommender
 
+DEBUG_LIMIT = None
+# Use only this many most frequent items
+N_ITEMS = None
+# Use only items that appear this many times
+MIN_COUNT = 55
+# Use command line arg '-m' instead
 
-if __name__ == '__main__':
-    DEBUG_LIMIT = None
-    # Use only this many most frequent items
-    N_ITEMS = None
-    # Use only items that appear this many times
-    MIN_COUNT = 55
-    # Use command line arg '-m' instead
+TRACK_INFO = ['artist_name', 'track_name', 'album_name']
+# TODO: find the side info fields
+PLAYLIST_INFO = ['name']
 
-    TRACK_INFO = ['artist_name', 'track_name', 'album_name']
-    # TODO: find the side info fields
-    PLAYLIST_INFO = ['name']
+# TFIDF_PARAMS = { 'max_features': N_WORDS }
 
-    # TFIDF_PARAMS = { 'max_features': N_WORDS }
+W2V_PATH = "/mnt/c/Development/github/Python/GoogleNews-vectors-negative300.bin.gz"
+W2V_IS_BINARY = True
+# VECTORS = KeyedVectors.load_word2vec_format(W2V_PATH, binary=W2V_IS_BINARY)
+DATA_PATH = "/data21/lgalke/datasets/MPD/data/"
 
-    W2V_PATH = "/data21/lgalke/vectors/GoogleNews-vectors-negative300.bin.gz"
-    W2V_IS_BINARY = True
-    VECTORS = KeyedVectors.load_word2vec_format(W2V_PATH, binary=W2V_IS_BINARY)
-    DATA_PATH = "/data21/lgalke/datasets/MPD/data/"
+CONDITIONS = ConditionList([
+    # ('name', PretrainedWordEmbeddingCondition(VECTORS)),
+    # ('artist_name', CategoricalCondition(embedding_dim=32, reduce="sum", # vocab_size=0.01,
+    #                                      sparse=True, embedding_on_gpu=True)),
+    # ('track_name', PretrainedWordEmbeddingCondition(VECTORS)),
+    # ('album_name', PretrainedWordEmbeddingCondition(VECTORS))
+])
 
-    CONDITIONS = ConditionList([
-        ('name', PretrainedWordEmbeddingCondition(VECTORS)),
-        ('artist_name', CategoricalCondition(embedding_dim=32, reduce="sum", # vocab_size=0.01,
-                                            sparse=True, embedding_on_gpu=True)),
-        ('track_name', PretrainedWordEmbeddingCondition(VECTORS)),
-        ('album_name', PretrainedWordEmbeddingCondition(VECTORS))
-    ])
+# These need to be implemented in evaluation.py
+METRICS = ['mrr']
 
-    # These need to be implemented in evaluation.py
-    METRICS = ['mrr']
-
-    MODELS = [
-        # Only item sets
-        #Countbased(),
-        #SVDRecommender(1000, use_title=False),
-        #AAERecommender(adversarial=True, use_title=False, n_epochs=55, embedding=VECTORS),
-        #AAERecommender(adversarial=False, n_epochs=1),
-        #VAERecommender(conditions=None, n_epochs=55, batch_size=1000),
-        #DAERecommender(conditions=None, n_epochs=55, batch_size=1000),
-        # Title-enhanced
-        #SVDRecommender(1000, use_title=True),
-        #AAERecommender(adversarial=True, use_side_info=True, n_epochs=55, embedding=VECTORS),
-        #AAERecommender(adversarial=False, use_side_info=["name"], n_epochs=5, embedding=VECTORS),
-        #DecodingRecommender(n_epochs=55, embedding=VECTORS)
-        VAERecommender(conditions=CONDITIONS, n_epochs=55, batch_size=1000),
-        DAERecommender(conditions=CONDITIONS, n_epochs=55, batch_size=1000),
-        # Generic condition all
-        #AAERecommender(adversarial=False, conditions=CONDITIONS, n_epochs=55),
-        #AAERecommender(adversarial=True, conditions=CONDITIONS, n_epochs=55),
-        #DecodingRecommender(conditions=CONDITIONS, n_epochs=55)
-        # Put more here...
-    ]
+MODELS = [
+    # Only item sets
+    #Countbased(),
+    #SVDRecommender(1000, use_title=False),
+    #AAERecommender(adversarial=True, use_title=False, n_epochs=55, embedding=VECTORS),
+    #AAERecommender(adversarial=False, n_epochs=1),
+    #VAERecommender(conditions=None, n_epochs=55, batch_size=1000),
+    #DAERecommender(conditions=None, n_epochs=55, batch_size=1000),
+    # Title-enhanced
+    #SVDRecommender(1000, use_title=True),
+    #AAERecommender(adversarial=True, use_side_info=True, n_epochs=55, embedding=VECTORS),
+    #AAERecommender(adversarial=False, use_side_info=["name"], n_epochs=5, embedding=VECTORS),
+    #DecodingRecommender(n_epochs=55, embedding=VECTORS)
+    # VAERecommender(conditions=CONDITIONS, n_epochs=55, batch_size=1000),
+    # DAERecommender(conditions=CONDITIONS, n_epochs=55, batch_size=1000),
+    # Generic condition all
+    #AAERecommender(adversarial=False, conditions=CONDITIONS, n_epochs=55),
+    #AAERecommender(adversarial=True, conditions=CONDITIONS, n_epochs=55),
+    #DecodingRecommender(conditions=CONDITIONS, n_epochs=55)
+    # Put more here...
+]
 
 
 def load(path):
@@ -115,7 +116,7 @@ def playlists_from_slices(slices_dir, n_jobs=1, debug=False, only=None, without=
         print("Debug mode: using only two slices")
         it = it[:2]
 
-    if verbose:
+    if verbose: 
         print("Loading", len(it), "slices using", n_jobs, "jobs.")
     n_jobs = int(n_jobs)
     if n_jobs == 1:
@@ -300,6 +301,12 @@ def prepare_evaluation(bags, test_size=0.1, n_items=None, min_count=None):
     return train_set, dev_set, missing
 
 
+def log(*print_args, logfile=None):
+    """ Maybe logs the output also in the file `outfile` """
+    if logfile:
+        with open(logfile, 'a') as fhandle:
+            print(*print_args, file=fhandle)
+    print(*print_args)
 
 
 def main(outfile=None, min_count=None, aggregate=None):

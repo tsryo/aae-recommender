@@ -29,7 +29,7 @@ except SystemError:
 
 torch.manual_seed(42)
 
-W2V_PATH = "/data21/lgalke/vectors/GoogleNews-vectors-negative300.bin.gz"
+W2V_PATH = "/mnt/c/Development/github/Python/GoogleNews-vectors-negative300.bin.gz"
 W2V_IS_BINARY = True
 
 TORCH_OPTIMIZERS = {
@@ -142,7 +142,7 @@ class VAE(nn.Module):
         KLD_element = mu.pow(2).add_(logvar.exp()).mul_(-1).add_(1).add_(logvar)
         KLD = torch.sum(KLD_element).mul_(-0.5)
 
-        return BCE + KLD
+        return torch.nan_to_num(BCE) + torch.nan_to_num(KLD)
 
     def partial_fit(self, X, y=None, condition_data=None):
         """
@@ -171,7 +171,7 @@ class VAE(nn.Module):
             recon_batch, mu, logvar = self(X, condition_data)
         else:
             recon_batch, mu, logvar = self(X)
-
+        recon_batch = torch.nan_to_num(recon_batch)
         loss = self.loss_function(recon_batch, X, mu, logvar)
         if use_condition:
             self.conditions.zero_grad()
@@ -257,6 +257,7 @@ class VAE(nn.Module):
                     recon_batch, mu, logvar = self(X_batch, c_batch)
                 else:
                     recon_batch, mu, logvar = self(X_batch)
+                recon_batch = torch.nan_to_num(recon_batch)
                 test_loss += self.loss_function(recon_batch, X_batch, mu, logvar).item()
                 pred.append(recon_batch.data.cpu().numpy())
 
@@ -264,6 +265,16 @@ class VAE(nn.Module):
             print('====> Test set loss: {:.4f}'.format(test_loss))
 
         return np.vstack(pred)
+    def reset_parameters(self):
+        if self is not None:
+            attrs_to_call = [getattr(self, attr) for attr in dir(self) if not attr.startswith("__") and
+                             hasattr(getattr(self, attr), 'reset_parameters')]
+            for attr in attrs_to_call:
+                attr.reset_parameters()
+                attr.zero_grad()
+
+        if self.optimizer is not None:
+            self.optimizer = torch.optim.Adam(self.parameters(), self.optimizer.param_groups[0]['lr'])
 
 
 class VAERecommender(Recommender):
@@ -341,6 +352,17 @@ class VAERecommender(Recommender):
         pred = self.model.predict(X, condition_data=condition_data)
 
         return pred
+
+    def zero_grad(self):
+        """ Zeros gradients of all NN modules """
+        if self.model is not None:
+            self.model.zero_grad()
+    def reset_parameters(self):
+        if self.model is not None:
+            self.model.reset_parameters()
+            self.model.zero_grad()
+        if self.conditions is not None:
+            self.conditions.reset_parameters()
 
 
 def main():
