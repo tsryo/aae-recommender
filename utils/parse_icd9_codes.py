@@ -17,6 +17,24 @@ print("Reading data from {}".format(IN_DATA_PATH))
 df = pd.read_csv(IN_DATA_PATH, sep=SEPARATOR, index_col=False)
 df_vitals = pd.read_csv(IN_DATA_PATH_VITALS, sep=SEPARATOR, index_col=False)
 
+df1_ids = list(set(df['hadm_id'].values))
+df2_ids = list(set(df_vitals['hadm_id'].values))
+len(df1_ids) # 56786
+len(df2_ids) # 56777
+
+ids_intersect = list(set(df1_ids).intersection(set(df2_ids)))
+n_ids = len(ids_intersect) # 56777
+subsample = -1 # debug , set to -1 otherwise
+
+if subsample != -1:
+    n_samples = int(n_ids * subsample)
+    ids_intersect = ids_intersect[0:n_samples]
+    print('INFO: sampling {} ids (out of {}) only'.format(n_samples, n_ids))
+    df = df.loc[df['hadm_id'].isin(ids_intersect)]
+    df_vitals = df_vitals.loc[df_vitals['hadm_id'].isin(ids_intersect)]
+    df.shape
+    df_vitals.shape
+
 
 
 ### plotting reasons...
@@ -192,7 +210,7 @@ def impute_timeseries_values(lst_vals, time_mins):
     first_non_nan_time = time_mins[first_non_nan_idx]
 
     for i in nan_idxs:
-        imp_val = np.nan
+        imp_val = 0
         if i > last_non_nan_idx:
             imp_val = lst_vals[last_non_nan_idx]
         elif i < first_non_nan_idx:
@@ -256,18 +274,18 @@ aggr_fns_d = {"slope": slope_fn, "mean": np.nanmean, "sd": np.std, "delta": delt
 df = df.loc[df['age'] >= 18] # remove all non-adult entries
 all_hadm_ids = list(set(df['hadm_id']))
 all_icds  = df['icd9_code'].values
-N_icd_diag_codes_all = [x for x in all_icds if type(x) != float and x[0:2] == 'd_']
-len(N_icd_diag_codes_all)
-len(set(N_icd_diag_codes_all))
-icd_val_counts = pd.value_counts(all_icds)
-icds_more_than50_occurs = [ x[1] for x in list(zip(icd_val_counts, icd_val_counts.index)) if x[0] >= 50]
-all_icds_50 = [x for x in all_icds if x in icds_more_than50_occurs]
+# N_icd_diag_codes_all = [x for x in all_icds if type(x) != float and x[0:2] == 'd_']
+# len(N_icd_diag_codes_all)
+# len(set(N_icd_diag_codes_all))
+# icd_val_counts = pd.value_counts(all_icds)
+# icds_more_than50_occurs = [ x[1] for x in list(zip(icd_val_counts, icd_val_counts.index)) if x[0] >= 50]
+# all_icds_50 = [x for x in all_icds if x in icds_more_than50_occurs]
 
-N_icd_proc_codes_all = [x for x in all_icds if x[0:2] == 'p_']
-len(N_icd_proc_codes_all)
-len(set(N_icd_proc_codes_all))
-icd_val_counts = pd.value_counts(all_icds)
-icds_more_than50_occurs = [ x for x in icd_val_counts.to_list() if x >= 50]
+# N_icd_proc_codes_all = [x for x in all_icds if x[0:2] == 'p_']
+# len(N_icd_proc_codes_all)
+# len(set(N_icd_proc_codes_all))
+# icd_val_counts = pd.value_counts(all_icds)
+# icds_more_than50_occurs = [ x for x in icd_val_counts.to_list() if x >= 50]
 
 
 
