@@ -5,19 +5,12 @@ import random
 import sys
 from abc import ABC, abstractmethod
 from sklearn.preprocessing import minmax_scale
-from sklearn.metrics import f1_score, confusion_matrix, precision_recall_curve, multilabel_confusion_matrix
 import numpy as np
 import scipy.sparse as sp
-from irgan.utils import precision_at_k, recall_at_k
-from irgan.utils import F1 as f1score
-from random import choices
-from torch.nn.functional import threshold
-
 from . import rank_metrics_with_std as rm
 from .datasets import corrupt_sets
 from .transforms import lists2sparse
-from .rank_metrics_with_std import r_precision
-from aaerec.rank_metrics_with_std import mean_average_precision, mean_average_recall, mean_average_f1
+from aaerec.rank_metrics_with_std import mean_average_f1
 
 
 def argtopk(X, k):
