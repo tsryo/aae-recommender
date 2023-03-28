@@ -37,6 +37,7 @@ The [`eval/mimic.py`](eval/mimic.py) file is an executable to run an evaluation 
 
 
 ## Dataset Format
+For queries used in extracting datasets from MIMIC-III database please see [`data_extraction.md`](data_extraction.md)
 
 The expected dataset Format for `IN_DATA_PATH` is a **comma-separated** with columns:
 
@@ -100,5 +101,6 @@ The expected dataset Format for `ICD_CODE_DEFS_PATH` is a **tab-separated** with
 - **long_title**
 
 For more details on MIMIC-III data definitions of columns [see here](https://physionet.org/content/mimiciii/1.4/).
+
 
 
