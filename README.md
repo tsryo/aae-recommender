@@ -119,11 +119,7 @@ For more details on MIMIC-III data definitions of columns [see here](https://phy
 
 ## References and cite
 
-Please see our papers for additional information on the models implemented and the experiments conducted:
-
-- [Autoencoder-based prediction of ICU clinical codes](in press)
- 
-
+Please see our papers [Autoencoder-based prediction of ICU clinical codes](https://link.springer.com/chapter/10.1007/978-3-031-34344-5_8) for additional information on the models implemented and the experiments conducted.
 
 If you use our code in your own work please cite one of these papers:
 
@@ -135,9 +131,9 @@ If you use our code in your own work please cite one of these papers:
                      },
         title     = {Autoencoder-based prediction of ICU clinical codes},
         booktitle = {Artificial Intelligence in Medicine},
-        year = {in press},
-        location = {Portoroz, Slovenia},
-        keywords = {prediction, medical codes, recommender systems, autoencoders},
+        year = {2023},
+        publisher={Springer Nature Switzerland},
+        pages={57--62},
     }
     
   
