@@ -24,7 +24,7 @@ from aaerec.vae import VAERecommender
 from aaerec.dae import DAERecommender
 from gensim.models.keyedvectors import KeyedVectors
 from aaerec.condition import ConditionList, PretrainedWordEmbeddingCondition, CategoricalCondition, Condition, ContinuousCondition
-from eval.fiv import load
+from irgan.utils import load
 from matplotlib import pyplot as plt
 import itertools as it
 import pandas as pd
@@ -365,8 +365,17 @@ def unpack_patients(patients, icd_code_defs = None):
                         'age': {},
                         'ethnicity_grouped': {},
                         'admission_type': {},
-                        'seq_num_len': {},
-                        'icd9_code_lst': {},#'los_icu_lst': {},'heartrate_min_lst': {},'heartrate_max_lst': {},'heartrate_mean_lst': {},'sysbp_min_lst': {},'sysbp_max_lst': {},'sysbp_mean_lst': {},'diasbp_min_lst': {},'diasbp_max_lst': {},'diasbp_mean_lst': {},'meanbp_min_lst': {},'meanbp_max_lst': {},'meanbp_mean_lst': {},'resprate_min_lst': {},'resprate_max_lst': {},'resprate_mean_lst': {},'tempc_min_lst': {},'tempc_max_lst': {},'tempc_mean_lst': {},'spo2_min_lst': {},'spo2_max_lst': {},'spo2_mean_lst': {},'glucose_min_lst': {},'glucose_max_lst': {},'glucose_mean_lst': {},
+                        'seq_num_len': {}, # model should not learn on how many codes are missing
+                        'icd9_code_d_lst': {},
+                        'icd9_code_p_lst': {},
+                        'los_icu_lst': {},
+                        'los_icu_len': {},
+                        'icu_stay_start_lst': {}, # todo:  figure out how to represent these lst vars
+                        'icu_stay_stop_lst': {},
+                        'time_mins_lst': {},
+                        'icu_stay_start_lst': {},
+                        'icu_stay_start_lst': {},
+                         #'los_icu_lst': {},'heartrate_min_lst': {},'heartrate_max_lst': {},'heartrate_mean_lst': {},'sysbp_min_lst': {},'sysbp_max_lst': {},'sysbp_mean_lst': {},'diasbp_min_lst': {},'diasbp_max_lst': {},'diasbp_mean_lst': {},'meanbp_min_lst': {},'meanbp_max_lst': {},'meanbp_mean_lst': {},'resprate_min_lst': {},'resprate_max_lst': {},'resprate_mean_lst': {},'tempc_min_lst': {},'tempc_max_lst': {},'tempc_mean_lst': {},'spo2_min_lst': {},'spo2_max_lst': {},'spo2_mean_lst': {},'glucose_min_lst': {},'glucose_max_lst': {},'glucose_mean_lst': {},
                         'los_icu_lst_slope': {}, 'heartrate_min_lst_slope': {}, 'heartrate_max_lst_slope': {}, 'heartrate_mean_lst_slope': {}, 'sysbp_min_lst_slope': {}, 'sysbp_max_lst_slope': {}, 'sysbp_mean_lst_slope': {}, 'diasbp_min_lst_slope': {}, 'diasbp_max_lst_slope': {}, 'diasbp_mean_lst_slope': {}, 'meanbp_min_lst_slope': {}, 'meanbp_max_lst_slope': {}, 'meanbp_mean_lst_slope': {}, 'resprate_min_lst_slope': {}, 'resprate_max_lst_slope': {}, 'resprate_mean_lst_slope': {}, 'tempc_min_lst_slope': {}, 'tempc_max_lst_slope': {}, 'tempc_mean_lst_slope': {}, 'spo2_min_lst_slope': {}, 'spo2_max_lst_slope': {}, 'spo2_mean_lst_slope': {}, 'glucose_min_lst_slope': {}, 'glucose_max_lst_slope': {}, 'glucose_mean_lst_slope': {},
                         'los_icu_lst_mean': {}, 'heartrate_min_lst_mean': {}, 'heartrate_max_lst_mean': {}, 'heartrate_mean_lst_mean': {}, 'sysbp_min_lst_mean': {}, 'sysbp_max_lst_mean': {}, 'sysbp_mean_lst_mean': {}, 'diasbp_min_lst_mean': {}, 'diasbp_max_lst_mean': {}, 'diasbp_mean_lst_mean': {}, 'meanbp_min_lst_mean': {}, 'meanbp_max_lst_mean': {}, 'meanbp_mean_lst_mean': {}, 'resprate_min_lst_mean': {}, 'resprate_max_lst_mean': {}, 'resprate_mean_lst_mean': {},
                         'los_icu_lst_sd': {}, 'heartrate_min_lst_sd': {}, 'heartrate_max_lst_sd': {}, 'heartrate_mean_lst_sd': {}, 'sysbp_min_lst_sd': {}, 'sysbp_max_lst_sd': {}, 'sysbp_mean_lst_sd': {}, 'diasbp_min_lst_sd': {}, 'diasbp_max_lst_sd': {}, 'diasbp_mean_lst_sd': {}, 'meanbp_min_lst_sd': {}, 'meanbp_max_lst_sd': {}, 'meanbp_mean_lst_sd': {}, 'resprate_min_lst_sd': {}, 'resprate_max_lst_sd': {}, 'resprate_mean_lst_sd': {}, 'tempc_min_lst_sd': {}, 'tempc_max_lst_sd': {}, 'tempc_mean_lst_sd': {}, 'spo2_min_lst_sd': {}, 'spo2_max_lst_sd': {}, 'spo2_mean_lst_sd': {}, 'glucose_min_lst_sd': {}, 'glucose_max_lst_sd': {}, 'glucose_mean_lst_sd': {},
@@ -411,14 +420,41 @@ def unpack_patients(patients, icd_code_defs = None):
     # bag_of_codes and ids should have corresponding indices
     return bags_of_codes, ids, other_attributes, d_icd_code_defs
 
+def print_plot_pat_dict(d1):
+    # Assuming 'my_dict' is your dictionary
+    for key, value in d1.items():
+        if key in ['time_mins_lst', 'los_icu_lst']:
+            # Skip the 'time' key
+            continue
+        if not re.match('.*mean_lst$', key):
+            continue
 
-def plot_patient_hists(patients):
+        if isinstance(value, list) and all(isinstance(item, (int, float)) for item in value):
+            # Plot numeric lists as time series
+            time_values = d1['time_mins_lst']
+            plt.plot(time_values, value, label=key)
+        elif isinstance(value, str):
+            # Display whole strings
+            print(f"{key}: {value}")
+        elif isinstance(value, (int, float)):
+            # Display plain numbers
+            print(f"{key}: {value}")
+        else:
+            # Handle other data types as needed
+            print(f"{key}: {type(value)}")
+
+    plt.xlabel('Time (minutes)')
+    plt.ylabel('Value')
+    plt.legend()
+    plt.show()
+
+def plt_pat_histograms_demog(patients):
     for i in range(0,len(patients)):
         patient = patients[i]
-        icd9_code_lst_len = len(patient['icd9_code_lst'])
-        patients[i]['icd9_code_lst_len'] = icd9_code_lst_len
+        patients[i]['icd9_code_d_lst_len'] = len(patient['icd9_code_d_lst'])
+        patients[i]['icd9_code_p_lst_len'] = len(patient['icd9_code_p_lst'])
     columns = list(patients[0].keys())
-    str_cols = ['gender', 'ethnicity_grouped', 'admission_type', 'first_icu_stay', 'icd9_code_lst']
+    str_cols = ['gender', 'ethnicity_grouped', 'admission_type', 'first_icu_stay', 'icd9_code_d_lst', 'icd9_code_p_lst']
     percent_missing_numeric = lambda x: len(np.where(np.isnan(x))[0])/len(x)
     percent_missing_str = lambda x: sum([1 if i == 'nan' else 0 for i in x])/len(x)
     missing_fn_mapper = {'str': percent_missing_str, 'num': percent_missing_numeric}
@@ -426,17 +462,26 @@ def plot_patient_hists(patients):
         col_type = 'num'
         print(c_col)
         c_vals = [patients[x][c_col] for x in range(0, len(patients))]
-        if c_col == 'icd9_code_lst':
+        if c_col == 'icd9_code_d_lst' or c_col == 'icd9_code_p_lst' or c_col == 'los_icu_lst':
             c_vals = list(np.concatenate(c_vals).flat)
+        elif str.endswith(c_col, '_lst'):
+            continue
         if c_col in str_cols:
             col_type = 'str'
             c_vals = [str(i) for i in c_vals]
         percent_missing = missing_fn_mapper[col_type](c_vals)
-        plt.hist(c_vals, bins=50, facecolor='g')
+
+        if c_col == 'age':
+            c_vals = np.multiply(np.round(np.divide(c_vals, 5)), 5) # bin ages into 5-year groups
+        n_uniq_vals = len(pd.Series(c_vals).value_counts())
+        plt.figure(figsize=(7, 7))
+        plt.grid(True, alpha=0.5, axis = 'y', which = 'both', linestyle ='--', linewidth = 2)
+        plt.hist(c_vals, bins=min(32,n_uniq_vals), facecolor='#0d65f2', edgecolor='black', alpha=0.85, linewidth=1)
+
         plt.xlabel(c_col)
-        plt.ylabel('frequency')
+        plt.ylabel('Frequency')
         plt.title('Histogram of {} (missing = %{:.2f})'.format(c_col, percent_missing*100))
-        plt.savefig('../plots/demographics/hist_{}.png'.format(c_col), bbox_inches='tight')
+        plt.savefig('../../plt/plots/demographics/histograms/{}.png'.format(c_col), bbox_inches='tight')
         plt.show()
 
 def hyperparam_optimize(model, train_set, val_set, tunning_params= {'prior': ['gauss'], 'gen_lr': [0.001], 'reg_lr': [0.001],
@@ -636,6 +681,47 @@ def save_object(obj, filename):
     with open(filename, 'wb') as outp:  # Overwrites any existing file.
         pickle.dump(obj, outp, pickle.HIGHEST_PROTOCOL)
 
+def simplify_patients_dict(patients):
+    # we may want to also predict the sequence in which icd codes were assigned
+    # at least for procedural, not sure for diagnosis..
+    # believe there is a temporal aspect, and relation with patient vitals and procedure
+    # also, need to keep in mind that icd proc codes can repeat, diag are unique
+    # note - icd codes in list are sorted by seq_num
+    # (we only know if one icd proc/diag code came before another, but not when in relation to anything else)
+    # in that case is it still useful to keep order in mind?
+    # assume yes, but dont do anything with this info for now..
+    keys_to_keep = ['hadm_id',
+    'admission_type',
+    'age',
+    'gender',
+    'ethnicity_grouped',
+    'los_hospital',
+    'icd9_code_d_lst',
+    #'icd9_code_d_lst_len', # is it reasonable to let the model know how many diag codes there are? don't think so...
+    # 'seq_num_d_len', # same as icd9_code_d_lst_len
+    'icd9_code_p_lst',
+    #'icd9_code_p_lst_len', # same here..
+    # 'seq_num_p_len',
+    'los_icu_lst',
+    'los_icu_len',
+    'icu_stay_start_lst',
+    'icu_stay_stop_lst',
+    'time_mins_lst',
+    'heartrate_mean_lst',
+    'heartrate_mean_lst_slope',
+    'heartrate_mean_lst_mean',
+    'heartrate_mean_lst_sd',
+    'heartrate_mean_lst_delta',
+    'heartrate_mean_lst_min',
+    'heartrate_mean_lst_max',
+    'heartrate_mean_lst_mm']
+    keys_to_remove = [key for key in patients[0].keys() if key not in keys_to_keep]
+    for i in range(0,len(patients)):
+        for key in keys_to_remove:
+            patients[i].pop(key)
+    return patients
+
+
 # @param fold_index - run a specific fold of CV (-1 = run all folds)
 # see lines at parser.add_argument for param details
 def main(min_count = 50, drop = 0.5, n_folds = 5, model_idx = -1, outfile = 'out.log', fold_index = -1):
@@ -643,6 +729,10 @@ def main(min_count = 50, drop = 0.5, n_folds = 5, model_idx = -1, outfile = 'out
     print('drop = {}; min_count = {}, n_folds = {}, model_idx = {}'.format(drop, min_count, n_folds, model_idx))
     print("Loading data from", DATA_PATH)
     patients = load(DATA_PATH)
+    patients = simplify_patients_dict(patients)
+    # print("plt_pat_histograms_demog...")
+    # plt_pat_histograms_demog(patients)
+    # return None
     print("Unpacking MIMIC data...")
     bags_of_patients, ids, side_info, d_icd_code_defs = unpack_patients(patients, icd_code_defs)  # with conditions
     assert(len(set(ids)) == len(ids))
