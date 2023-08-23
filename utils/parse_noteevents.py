@@ -555,7 +555,7 @@ if RUN_STEP6:
         outputs = model(features['input_ids'], features['attention_mask'])
     print(f'run model done')
     all_hidden_states = torch.stack(outputs[2])
-    all_hidden_states.to(device)
+    # all_hidden_states.to(device)
 
     class AttentionPooling(nn.Module):
         def __init__(self, num_layers, hidden_size, hiddendim_fc, device):
@@ -566,27 +566,19 @@ if RUN_STEP6:
             self.dropout = nn.Dropout(0.1)
             self.device = device
             q_t = np.random.normal(loc=0.0, scale=0.1, size=(1, self.hidden_size))
-            q = nn.Parameter(torch.from_numpy(q_t)).float()
-            print(f"q.device={q.device}")
-            q.to(device)
-            print(f"q.device={q.device}")
-            self.q = q
+            self.q = nn.Parameter(torch.from_numpy(q_t)).float()
             w_ht = np.random.normal(loc=0.0, scale=0.1, size=(self.hidden_size, self.hiddendim_fc))
             self.w_h = nn.Parameter(torch.from_numpy(w_ht)).float()
-            self.w_h.to(device)
 
         def forward(self, all_hidden_states):
             hidden_states = torch.stack([all_hidden_states[layer_i][:, 0].squeeze()
                                          for layer_i in range(1, self.num_hidden_layers + 1)], dim=-1)
             hidden_states = hidden_states.view(-1, self.num_hidden_layers, self.hidden_size)
-            hidden_states.to(self.device)
             out = self.attention(hidden_states)
             out = self.dropout(out)
             return out
 
         def attention(self, h):
-            self.q.to(self.device)
-            h.to(self.device)
             print(f"h.device = {h.device}")
             print(f"self.q.device = {self.q.device}")
             v = torch.matmul(self.q, h.transpose(-2, -1)).squeeze(1)
@@ -598,7 +590,7 @@ if RUN_STEP6:
 
     hiddendim_fc = 128
     pooler = AttentionPooling(config.num_hidden_layers, config.hidden_size, hiddendim_fc, device)
-    pooler.to(device)
+    # pooler.to(device)
     print(f'load attention pooling done')
     attention_pooling_embeddings = pooler(all_hidden_states)
     print(f'pooling done')
