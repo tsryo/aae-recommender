@@ -582,6 +582,10 @@ if RUN_STEP6:
             return out
 
         def attention(self, h):
+            self.q.to(self.device)
+            h.to(self.device)
+            print(f"h.device = {h.device}")
+            print(f"self.q.device = {self.q.device}")
             v = torch.matmul(self.q, h.transpose(-2, -1)).squeeze(1)
             v = F.softmax(v, -1)
             v_temp = torch.matmul(v.unsqueeze(1), h).transpose(-2, -1)
