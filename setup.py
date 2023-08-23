@@ -24,7 +24,7 @@ requirements = [
 	'dill==0.3.6',
 	'docutils==0.19',
 	'docutils-stubs==0.0.22',
-	'en-core-web-sm==3.6.0',
+	# 'en-core-web-sm==3.6.0',
 	'exceptiongroup==1.0.3',
 	'filelock==3.12.2',
 	'fonttools==4.38.0',
