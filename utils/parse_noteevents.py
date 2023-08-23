@@ -1,4 +1,4 @@
-import sys
+import time
 import Levenshtein
 from CONSTANTS import DATA_PATH, IN_DATA_TEXT_PATH
 from irgan.utils import load
@@ -47,6 +47,21 @@ CONCAT_JSON_PROCESSED_FILENAME = "../../data/MIMIC/hadm_ids_notes_conc_processed
 
 EMBEDDINGS_FILENAME = "../../data/MIMIC/roberta_base_embeddings.json"
 HADM_IDS_FROM_TEXT_MISSING_CODES_FILENAME = "../../data/MIMIC/hamd_ids_missing_codes.csv"
+
+
+def format_time(seconds):
+    hours = seconds // 3600
+    minutes = (seconds % 3600) // 60
+    remaining_seconds = seconds % 60
+    formatted_time = ""
+    # if hours > 0:
+    formatted_time += f"{hours} hour{'s' if hours > 1 else ''} "
+    # if minutes > 0:
+    formatted_time += f"{minutes} minute{'s' if minutes > 1 else ''} "
+    # if remaining_seconds > 0 or (hours == 0 and minutes == 0):
+    formatted_time += f"{remaining_seconds} second{'s' if remaining_seconds > 1 else ''}"
+
+    return formatted_time.strip()
 
 def extract_date_in_milliseconds(text):
     milis = __extract_date_in_milliseconds_pat1(text)
@@ -204,7 +219,7 @@ def remove_strings(input_string, strings_to_remove):
 
     return input_string
 
-
+start_time_seconds = int(time.time())
 
 # Step 1 - read data from patient details and noteevents.
 if RUN_STEP1:
@@ -301,7 +316,6 @@ if RUN_STEP1:
 
     print(f"Done after {batch_write_counter} batches")
 
-
 if RUN_STEP2:
     print(f"Read {BATCHED_JSON_FILENAME} , merge multiple entries per hadm_id and concatenate notes")
     batches_per_hadm_id = {}
@@ -372,7 +386,6 @@ if RUN_STEP2:
 
     print(f"Done step 2. Written to {CONCAT_JSON_FILENAME}")
 
-
 if RUN_STEP3:
     print(f"Read {CONCAT_JSON_FILENAME} , record entries for which we have no icd_codes in {DATA_PATH}")
     all_hadm_ids_text = []
@@ -393,7 +406,6 @@ if RUN_STEP3:
         csv_writer = csv.writer(file)
         csv_writer.writerow(hadm_ids_missing_codes)
     print(f"Wrote hadm_ids from notes that are  missing codes in {HADM_IDS_FROM_TEXT_MISSING_CODES_FILENAME}")
-
 
 if RUN_STEP4:
     print(f"Read {CONCAT_JSON_FILENAME} , remove entries for which we have no icd_codes in {DATA_PATH} [recorded in {HADM_IDS_FROM_TEXT_MISSING_CODES_FILENAME}]")
@@ -502,7 +514,7 @@ if RUN_STEP6:
     logging.set_verbosity_warning()
     write_out = []
     # read and parse text into tokens
-    in_lines = read_specific_lines(CONCAT_JSON_PROCESSED_FILENAME, line_numbers= list(range(0,46189))) # debug
+    in_lines = read_specific_lines(CONCAT_JSON_PROCESSED_FILENAME, line_numbers= list(range(0, 10))) # all 46189
     print(f'read input done')
     x1 = []
     for c_line in in_lines:
@@ -574,7 +586,7 @@ if RUN_STEP6:
     print(f'pooling done')
     # logits = nn.Linear(hiddendim_fc, 1)(attention_pooling_embeddings)  # regression head
     del config, model, tokenizer, features
-    gc.collect();
+    gc.collect()
 
     print(f'write to file start')
     #  how do we link the 100 embeddings back to their hadm_ids?
@@ -602,6 +614,8 @@ if RUN_STEP6:
 
 
 print("DONE DONE")
+end_time_seconds = int(time.time())
+print(f"execution took {format_time(end_time_seconds-start_time_seconds)}")
 
 
 
