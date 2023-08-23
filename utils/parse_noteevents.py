@@ -566,8 +566,11 @@ if RUN_STEP6:
             self.dropout = nn.Dropout(0.1)
             self.device = device
             q_t = np.random.normal(loc=0.0, scale=0.1, size=(1, self.hidden_size))
-            self.q = nn.Parameter(torch.from_numpy(q_t)).float()
-            self.q.to(device)
+            q = nn.Parameter(torch.from_numpy(q_t)).float()
+            print(f"q.device={q.device}")
+            q.to(device)
+            print(f"q.device={q.device}")
+            self.q = q
             w_ht = np.random.normal(loc=0.0, scale=0.1, size=(self.hidden_size, self.hiddendim_fc))
             self.w_h = nn.Parameter(torch.from_numpy(w_ht)).float()
             self.w_h.to(device)
