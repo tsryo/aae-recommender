@@ -588,6 +588,7 @@ if RUN_STEP6:
 
     hiddendim_fc = 128
     pooler = AttentionPooling(config.num_hidden_layers, config.hidden_size, hiddendim_fc)
+    pooler.to(device)
     print(f'load attention pooling done')
     attention_pooling_embeddings = pooler(all_hidden_states)
     print(f'pooling done')
