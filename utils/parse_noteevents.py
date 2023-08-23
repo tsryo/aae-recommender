@@ -514,7 +514,7 @@ if RUN_STEP6:
     logging.set_verbosity_warning()
     write_out = []
     # read and parse text into tokens
-    in_lines = read_specific_lines(CONCAT_JSON_PROCESSED_FILENAME, line_numbers= list(range(0, 10))) # all 46189
+    in_lines = read_specific_lines(CONCAT_JSON_PROCESSED_FILENAME, line_numbers= list(range(0, 100))) # all 46189
     print(f'read input done')
     x1 = []
     for c_line in in_lines:
@@ -555,7 +555,7 @@ if RUN_STEP6:
         outputs = model(features['input_ids'], features['attention_mask'])
     print(f'run model done')
     all_hidden_states = torch.stack(outputs[2])
-
+    all_hidden_states.to(device)
 
     class AttentionPooling(nn.Module):
         def __init__(self, num_layers, hidden_size, hiddendim_fc):
