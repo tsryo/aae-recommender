@@ -525,7 +525,7 @@ if RUN_STEP6:
     print(f'massage input done')
 
     # get GPU if possible
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    # device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
 
     # load pre-trained transformer model
     model_name = 'roberta-base'#'bert-base-uncased'
@@ -535,11 +535,11 @@ if RUN_STEP6:
 
     tokenizer = AutoTokenizer.from_pretrained(model_name, config=config)
     model = AutoModel.from_pretrained(model_name, config=config)
-    model.to(device)
+    # model.to(device)
     print(f'loaded model done')
-
+    texts = [' '.join(x['eventnotes']) for x in x1]
     features = tokenizer.batch_encode_plus(
-        [' '.join(x['eventnotes']) for x in x1],
+        texts,
         add_special_tokens=True,
         padding='max_length',
         max_length=max_seq_length,
@@ -548,7 +548,7 @@ if RUN_STEP6:
         return_attention_mask=True
     )
 
-    features.to(device)
+    # features.to(device)
 
     print(f'tokenizer init done')
     with torch.no_grad():
