@@ -514,7 +514,7 @@ if RUN_STEP6:
     logging.set_verbosity_warning()
     write_out = []
     # read and parse text into tokens
-    in_lines = read_specific_lines(CONCAT_JSON_PROCESSED_FILENAME, line_numbers= list(range(0, 100))) # all 46189
+    in_lines = read_specific_lines(CONCAT_JSON_PROCESSED_FILENAME, line_numbers= list(range(0, 10))) # all 46189
     print(f'read input done')
     x1 = []
     for c_line in in_lines:
@@ -558,22 +558,25 @@ if RUN_STEP6:
     all_hidden_states.to(device)
 
     class AttentionPooling(nn.Module):
-        def __init__(self, num_layers, hidden_size, hiddendim_fc):
+        def __init__(self, num_layers, hidden_size, hiddendim_fc, device):
             super(AttentionPooling, self).__init__()
             self.num_hidden_layers = num_layers
             self.hidden_size = hidden_size
             self.hiddendim_fc = hiddendim_fc
             self.dropout = nn.Dropout(0.1)
-
+            self.device = device
             q_t = np.random.normal(loc=0.0, scale=0.1, size=(1, self.hidden_size))
             self.q = nn.Parameter(torch.from_numpy(q_t)).float()
+            self.q.to(device)
             w_ht = np.random.normal(loc=0.0, scale=0.1, size=(self.hidden_size, self.hiddendim_fc))
             self.w_h = nn.Parameter(torch.from_numpy(w_ht)).float()
+            self.w_h.to(device)
 
         def forward(self, all_hidden_states):
             hidden_states = torch.stack([all_hidden_states[layer_i][:, 0].squeeze()
                                          for layer_i in range(1, self.num_hidden_layers + 1)], dim=-1)
             hidden_states = hidden_states.view(-1, self.num_hidden_layers, self.hidden_size)
+            hidden_states.to(self.device)
             out = self.attention(hidden_states)
             out = self.dropout(out)
             return out
@@ -587,7 +590,7 @@ if RUN_STEP6:
 
 
     hiddendim_fc = 128
-    pooler = AttentionPooling(config.num_hidden_layers, config.hidden_size, hiddendim_fc)
+    pooler = AttentionPooling(config.num_hidden_layers, config.hidden_size, hiddendim_fc, device)
     pooler.to(device)
     print(f'load attention pooling done')
     attention_pooling_embeddings = pooler(all_hidden_states)
