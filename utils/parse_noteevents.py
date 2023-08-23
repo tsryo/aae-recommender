@@ -509,56 +509,8 @@ if RUN_STEP5:
     print(f"Wrote output to {CONCAT_JSON_PROCESSED_FILENAME}")
 
 if RUN_STEP6:
-    print(f"Read {CONCAT_JSON_PROCESSED_FILENAME} and try  tolearn representation via transformer [bert]")
-    logging.set_verbosity_error()
-    logging.set_verbosity_warning()
-    write_out = []
-    # read and parse text into tokens
-    in_lines = read_specific_lines(CONCAT_JSON_PROCESSED_FILENAME, line_numbers= list(range(0, 10))) # all 46189
-    print(f'read input done')
-    x1 = []
-    for c_line in in_lines:
-        c_line_d = json.loads(c_line.strip())
-        hadm_id = c_line_d['hadm_id']
-        c_line_d['eventnotes'] = c_line_d['eventnotes'].split('\t')
-        x1.append(c_line_d)
-    print(f'massage input done')
-
-    # get GPU if possible
-    # device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-
-    # load pre-trained transformer model
-    model_name = 'roberta-base'#'bert-base-uncased'
-    config = AutoConfig.from_pretrained(model_name)
-    config.update({'output_hidden_states': True})
-    max_seq_length = 256
-
-    tokenizer = AutoTokenizer.from_pretrained(model_name, config=config)
-    model = AutoModel.from_pretrained(model_name, config=config)
-    # model.to(device)
-    print(f'loaded model done')
-    texts = [' '.join(x['eventnotes']) for x in x1]
-    features = tokenizer.batch_encode_plus(
-        texts,
-        add_special_tokens=True,
-        padding='max_length',
-        max_length=max_seq_length,
-        truncation=True,
-        return_tensors='pt',
-        return_attention_mask=True
-    )
-
-    # features.to(device)
-
-    print(f'tokenizer init done')
-    with torch.no_grad():
-        outputs = model(features['input_ids'], features['attention_mask'])
-    print(f'run model done')
-    all_hidden_states = torch.stack(outputs[2])
-    # all_hidden_states.to(device)
-
     class AttentionPooling(nn.Module):
-        def __init__(self, num_layers, hidden_size, hiddendim_fc, device):
+        def __init__(self, num_layers, hidden_size, hiddendim_fc, device=None):
             super(AttentionPooling, self).__init__()
             self.num_hidden_layers = num_layers
             self.hidden_size = hidden_size
@@ -588,39 +540,89 @@ if RUN_STEP6:
             return v
 
 
-    hiddendim_fc = 128
-    pooler = AttentionPooling(config.num_hidden_layers, config.hidden_size, hiddendim_fc, device)
-    # pooler.to(device)
-    print(f'load attention pooling done')
-    attention_pooling_embeddings = pooler(all_hidden_states)
-    print(f'pooling done')
-    # logits = nn.Linear(hiddendim_fc, 1)(attention_pooling_embeddings)  # regression head
+    print(f"Read {CONCAT_JSON_PROCESSED_FILENAME} and try  to learn representation via transformer [bert]")
+    logging.set_verbosity_error()
+    logging.set_verbosity_warning()
+
+    batch_size = 1000
+    batch_counter = 0
+
+    # load pre-trained transformer model
+    model_name = 'roberta-base'  # 'bert-base-uncased'
+    config = AutoConfig.from_pretrained(model_name)
+    config.update({'output_hidden_states': True})
+    max_seq_length = 256
+
+    tokenizer = AutoTokenizer.from_pretrained(model_name, config=config)
+    model = AutoModel.from_pretrained(model_name, config=config)
+    # model.to(device)
+    print(f'loaded model done')
+    for in_lines in read_file_in_chunks(CONCAT_JSON_PROCESSED_FILENAME, batch_size):
+        write_out = []
+        print(f"Batch {batch_counter} start...")
+
+        # read and parse text into tokens
+        # in_lines = read_specific_lines(CONCAT_JSON_PROCESSED_FILENAME, line_numbers=list(range(0, 10)))  # all 46189
+        # print(f'read input done')
+        x1 = []
+        for c_line in in_lines:
+            c_line_d = json.loads(c_line.strip())
+            hadm_id = c_line_d['hadm_id']
+            c_line_d['eventnotes'] = c_line_d['eventnotes'].split('\t')
+            x1.append(c_line_d)
+        # print(f'massage input done')
+        # get GPU if possible
+        # device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+
+        texts = [' '.join(x['eventnotes']) for x in x1]
+        features = tokenizer.batch_encode_plus(
+            texts,
+            add_special_tokens=True,
+            padding='max_length',
+            max_length=max_seq_length,
+            truncation=True,
+            return_tensors='pt',
+            return_attention_mask=True
+        )
+        # print(f'tokenizer init done')
+        with torch.no_grad():
+            outputs = model(features['input_ids'], features['attention_mask'])
+        print(f'run model done')
+        all_hidden_states = torch.stack(outputs[2])
+
+        hiddendim_fc = 128
+        pooler = AttentionPooling(config.num_hidden_layers, config.hidden_size, hiddendim_fc)
+        # pooler.to(device)
+        # print(f'load attention pooling done')
+        attention_pooling_embeddings = pooler(all_hidden_states)
+        print(f'pooling done')
+        # logits = nn.Linear(hiddendim_fc, 1)(attention_pooling_embeddings)  # regression head
+
+
+        # print(f'write to file start')
+        #  how do we link the 100 embeddings back to their hadm_ids?
+        xxx = attention_pooling_embeddings.detach().numpy()
+        for i in range(0, xxx.shape[0]):
+            write_out.append({"hadm_id": x1[i]['hadm_id'], "txt_embedding": list(xxx[i,])})
+
+        # write to file
+        with open(EMBEDDINGS_FILENAME, "a") as json_file:
+            for x in write_out:
+                x['txt_embedding'] = [round(float(y), 4) for y in x['txt_embedding']]
+                json.dump(x, json_file)
+                json_file.write('\n')
+
+        print(f"Wrote to {EMBEDDINGS_FILENAME}")
+        gc.collect()
+        # EMBEDDINGS_FILENAME
+        # print(f'Hidden States Output Shape: {all_hidden_states.detach().numpy().shape}')
+        # print(f'Attention Pooling Output Shape: {attention_pooling_embeddings.detach().numpy().shape}')
+        # print(f'Logits Shape: {logits.detach().numpy().shape}')
+
+        batch_counter += 1
+
     del config, model, tokenizer, features
     gc.collect()
-
-    print(f'write to file start')
-    #  how do we link the 100 embeddings back to their hadm_ids?
-    xxx = attention_pooling_embeddings.detach().numpy()
-    for i in range(0,xxx.shape[0]):
-        write_out.append({"hadm_id":x1[i]['hadm_id'], "txt_embedding" : list(xxx[i,]) })
-
-    # write to file
-    with open(EMBEDDINGS_FILENAME, "w") as json_file:
-        for x in write_out:
-            x['txt_embedding'] = [round(float(y),4) for y in x['txt_embedding']]
-            json.dump(x, json_file)
-            json_file.write('\n')
-
-    print(f"Wrote to {EMBEDDINGS_FILENAME}")
-
-    # EMBEDDINGS_FILENAME
-    # print(f'Hidden States Output Shape: {all_hidden_states.detach().numpy().shape}')
-    # print(f'Attention Pooling Output Shape: {attention_pooling_embeddings.detach().numpy().shape}')
-    # print(f'Logits Shape: {logits.detach().numpy().shape}')
-
-
-
-
 
 
 print("DONE DONE")
