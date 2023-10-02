@@ -1,6 +1,6 @@
 import time
 import Levenshtein
-from CONSTANTS import DATA_PATH, IN_DATA_TEXT_PATH
+from CONSTANTS import IN_DATA_PATH_DEMO_ICD_CODES, IN_DATA_TEXT_PATH, EMBEDDINGS_FILENAME
 from irgan.utils import load
 import seaborn as sns
 import re
@@ -45,7 +45,7 @@ CONCAT_JSON_FILENAME = "../../data/MIMIC/hadm_ids_notes_conc.json"
 CONCAT_JSON_FILTERED_FILENAME = "../../data/MIMIC/hadm_ids_notes_conc_filtered.json"
 CONCAT_JSON_PROCESSED_FILENAME = "../../data/MIMIC/hadm_ids_notes_conc_processed.json"
 
-EMBEDDINGS_FILENAME = "../../data/MIMIC/roberta_base_embeddings.json"
+
 HADM_IDS_FROM_TEXT_MISSING_CODES_FILENAME = "../../data/MIMIC/hamd_ids_missing_codes.csv"
 
 
@@ -387,11 +387,11 @@ if RUN_STEP2:
     print(f"Done step 2. Written to {CONCAT_JSON_FILENAME}")
 
 if RUN_STEP3:
-    print(f"Read {CONCAT_JSON_FILENAME} , record entries for which we have no icd_codes in {DATA_PATH}")
+    print(f"Read {CONCAT_JSON_FILENAME} , record entries for which we have no icd_codes in {IN_DATA_PATH_DEMO_ICD_CODES}")
     all_hadm_ids_text = []
     all_hadm_ids_icd_codes = []
     # get hadm_ids from patients
-    all_hadm_ids_icd_codes = extract_attributes_from_patients_json(DATA_PATH, ['hadm_id'])
+    all_hadm_ids_icd_codes = extract_attributes_from_patients_json(IN_DATA_PATH_DEMO_ICD_CODES, ['hadm_id'])
     for c_chunk in read_file_in_chunks(CONCAT_JSON_FILENAME, chunk_size=10):
     # first3 = read_specific_lines(CONCAT_JSON_FILENAME, line_numbers=[0,1,2])
         c_chunk = [json.loads(x) for x in c_chunk]
@@ -408,7 +408,7 @@ if RUN_STEP3:
     print(f"Wrote hadm_ids from notes that are  missing codes in {HADM_IDS_FROM_TEXT_MISSING_CODES_FILENAME}")
 
 if RUN_STEP4:
-    print(f"Read {CONCAT_JSON_FILENAME} , remove entries for which we have no icd_codes in {DATA_PATH} [recorded in {HADM_IDS_FROM_TEXT_MISSING_CODES_FILENAME}]")
+    print(f"Read {CONCAT_JSON_FILENAME} , remove entries for which we have no icd_codes in {IN_DATA_PATH_DEMO_ICD_CODES} [recorded in {HADM_IDS_FROM_TEXT_MISSING_CODES_FILENAME}]")
     # read HADM_IDS_FROM_TEXT_MISSING_CODES_FILENAME into list
     hadm_ids_to_remove = read_specific_lines(HADM_IDS_FROM_TEXT_MISSING_CODES_FILENAME, line_numbers=[0])
     hadm_ids_to_remove = hadm_ids_to_remove[0]

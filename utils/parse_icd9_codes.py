@@ -2,7 +2,7 @@ from collections.abc import Iterable
 import pandas as pd
 import json
 import numpy as np
-from CONSTANTS import DATA_PATH, ICD_CODE_DEFS_PATH, IN_DATA_PATH_VITALS, IN_DATA_PATH
+from CONSTANTS import IN_DATA_PATH_DEMO_ICD_CODES, ICD_CODE_DEFS_PATH, IN_DATA_PATH_VITALS, IN_DATA_PATH_DEMO_ICD_CODES_RAW
 from irgan.utils import load
 import matplotlib.pyplot as plt
 from datetime import datetime
@@ -147,10 +147,10 @@ aggr_fns_d = {"slope": slope_fn, "mean": mean_fn, "sd": sd_fn, "delta": delta_fn
 # Step 1 - read data from diagnoses, procedures, icu_staydetail, vitals.
 if 1 == 1:
     try_log_info("***************** START Step 1 - read data from diagnoses, procedures, icu_staydetail, vitals. *****************")
-    try_log_info("Reading data from {}".format(IN_DATA_PATH))
-    df = pd.read_csv(IN_DATA_PATH, sep=SEPARATOR, index_col=False)
+    try_log_info("Reading data from {}".format(IN_DATA_PATH_DEMO_ICD_CODES_RAW))
+    df = pd.read_csv(IN_DATA_PATH_DEMO_ICD_CODES_RAW, sep=SEPARATOR, index_col=False)
     uniq_hadm_ids_df = list(set(df['hadm_id'].values))
-    try_log_info("N hosp admissions in {} (1) = {}".format(IN_DATA_PATH, len(uniq_hadm_ids_df)))
+    try_log_info("N hosp admissions in {} (1) = {}".format(IN_DATA_PATH_DEMO_ICD_CODES_RAW, len(uniq_hadm_ids_df)))
 
     try_log_info("Reading data from {}".format(IN_DATA_PATH_VITALS))
     df_vitals = pd.read_csv(IN_DATA_PATH_VITALS, sep=SEPARATOR, index_col=False)
@@ -282,7 +282,7 @@ if PLOT_TIMESERIES_LINEPLOT:
 # Step ** - Generate summary table for patient vitals (vitals_table.csv)
 if GEN_VITALS_SUMMARY_TABLE:
     try_log_info("***************** START Step ** - GEN_VITALS_SUMMARY_TABLE  *****************")
-    patients = load(DATA_PATH)
+    patients = load(IN_DATA_PATH_DEMO_ICD_CODES)
     icd_code_defs = pd.read_csv(ICD_CODE_DEFS_PATH, sep='\t')
     all_icd_codes = [x['icd9_code_lst'] for x in patients]
     all_icd_codes = [y for x in all_icd_codes for y in x]
@@ -572,7 +572,7 @@ if 6 == 6:
         patients = df.T.to_dict()
 
         # serialize in json
-        out_data_path = IN_DATA_PATH[:-len('.csv')] + '_all_15Aug.json'
+        out_data_path = IN_DATA_PATH_DEMO_ICD_CODES_RAW[:-len('.csv')] + '_all_15Aug.json'
         try_log_info("Writing data to {}".format(out_data_path))
         with open(out_data_path, "a") as fp:
             for p in patients.values():
