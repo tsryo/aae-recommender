@@ -141,6 +141,8 @@ class Decoder(nn.Module):
         self.act1 = getattr(nn, activation)()
         self.act2 = getattr(nn, activation)()
         self.out_multiplier = out_multiplier
+        if torch.cuda.is_available():
+            self.out_multiplier = self.out_multiplier.cuda()
 
     def forward(self, inp):
         """ Forward implementation of 3-layer decoder """
@@ -572,8 +574,9 @@ class AdversarialAutoEncoder(AutoEncoderMixin):
     def __init__(self,
                  n_hidden=100,
                  n_code=50,
-                 gen_lr=0.001,
-                 reg_lr=0.001,
+                 gen_lr=0.01,
+                 reg_lr=0.01,
+                 disc_lr=0.0001,
                  prior='gauss',
                  prior_scale=None,
                  batch_size=100,
@@ -600,7 +603,7 @@ class AdversarialAutoEncoder(AutoEncoderMixin):
         self.reg_lr = reg_lr
         self.batch_size = batch_size
         self.verbose = verbose
-        self.gen_lr, self.reg_lr = gen_lr, reg_lr
+        self.gen_lr, self.disc_lr = gen_lr, disc_lr
         self.n_epochs = n_epochs
 
         self.enc, self.dec, self.disc = None, None, None
@@ -685,6 +688,12 @@ class AdversarialAutoEncoder(AutoEncoderMixin):
             self.optimizer = torch.optim.Adam(self.parameters(), self.optimizer.param_groups[0]['lr'])
 
     def ae_step(self, batch, condition_data=None):
+        """
+        Encoder/Decoder step
+        we want to make the encoder better at learning a representation of the input
+        and also make the decoder better at recreating the input from the representation of the encoder
+        """
+        self.disc.eval()
         z_sample = self.enc(batch)
 
         use_condition = _check_conditions(self.conditions, condition_data)
@@ -696,12 +705,12 @@ class AdversarialAutoEncoder(AutoEncoderMixin):
         # old_recon_loss = F.binary_cross_entropy(x_sample + TINY, batch.view(batch.size(0), batch.size(1)) + TINY)
         # cross-entropy should allow to handle repeating items in the list
         recon_loss = F.cross_entropy(x_sample + TINY, batch.view(batch.size(0), batch.size(1)) + TINY)
-
+        # clear the gradients from last time it was ran
         self.enc.zero_grad()
         self.dec.zero_grad()
         if use_condition:
             self.conditions.zero_grad()
-    
+
         # Compute gradients
         recon_loss.backward()
 
@@ -714,8 +723,13 @@ class AdversarialAutoEncoder(AutoEncoderMixin):
         return recon_loss.data.item()
 
     def disc_step(self, batch):
-        """ Perform one discriminator step on batch """
+        """
+        Perform one discriminator step on batch
+        Learns the discriminator to better tell apart whether a tensor in the latent space (z) came from the prior distr (real) or the generator/encoder (fake)
+        """
         self.enc.eval()
+        self.dec.eval()
+        self.disc.train() # we want the discriminator to get better at discriminating output from the generator (encoder) and the prior (Variable); so freeze the encoder
 
         z_real = Variable(self.prior_sampler((batch.size(0), self.n_code)))
         if self.prior_scale is not None:
@@ -734,7 +748,13 @@ class AdversarialAutoEncoder(AutoEncoderMixin):
         return disc_loss.data.item()
 
     def gen_step(self, batch):
+        """
+         Generator/Encoder step -
+         Learns the encoder/generator to better fool the discriminator (i.e., regularizes in an adversarial way)
+        """
         self.enc.train()
+        self.dec.eval()
+        self.disc.eval() # we want the generator (encoder) to get better at fooling the discriminator here, so discriminator should not be learning here
         z_fake_dist = self.enc(batch) # fake in this context means it is not originating from the distribution from the generator, i.e. its from the real data
         disc_fake_out = self.disc(z_fake_dist) # for each record in batch, how likely does the disc think that record came from outside the generator samples? 0 = def from generator, 1 = def not from generator
         gen_loss = -torch.mean(torch.log(disc_fake_out + TINY))
@@ -782,7 +802,7 @@ class AdversarialAutoEncoder(AutoEncoderMixin):
                            activation=self.activation,
                            dropout=self.dropout)
         self.dec = Decoder(code_size, self.n_hidden, X.shape[1],
-                           activation=self.activation, dropout=self.dropout, out_multiplier = self.decoder_out_multiplier)
+                           activation=self.activation, dropout=self.dropout, out_multiplier=self.decoder_out_multiplier)
 
         self.disc = Discriminator(self.n_code, self.n_hidden,
                                   dropout=self.dropout,
@@ -798,7 +818,7 @@ class AdversarialAutoEncoder(AutoEncoderMixin):
         self.dec_optim = optimizer_gen(self.dec.parameters(), lr=self.gen_lr)
         # Regularization
         self.gen_optim = optimizer_gen(self.enc.parameters(), lr=self.reg_lr)
-        self.disc_optim = optimizer_gen(self.disc.parameters(), lr=self.reg_lr)
+        self.disc_optim = optimizer_gen(self.disc.parameters(), lr=self.disc_lr)
 
         # do the actual training
         for epoch in range(self.n_epochs):
@@ -913,10 +933,6 @@ class AAERecommender(Recommender):
         if self.conditions:
             desc += " conditioned on: " + ', '.join(self.conditions.keys())
         desc += '\nModel Params: ' + str(self.model_params)
-        # TODO: is it correct for self.tfidf_params to be an EMPTY dict
-        # DONE: Yes it is only the *default*!
-        # desc += '\nTfidf Params: ' + str(self.tfidf_params)
-        # Anyways, this kind of stuff goes into the condition itself
         return desc
 
 
@@ -952,7 +968,7 @@ class AAERecommender(Recommender):
 
         n_occurs_l = [ max([x.count(c_i) for x in training_set.data]) for c_i in training_set.vocab.values()]
         n_occurs_l = torch.tensor(n_occurs_l)
-        n_occurs_l = n_occurs_l.view(1,-1)
+        n_occurs_l = n_occurs_l.view(1, -1)
         if self.adversarial:
             # Pass conditions through along with hyperparams
             self.model = AdversarialAutoEncoder(conditions=self.conditions, decoder_out_multiplier=n_occurs_l, **self.model_params)

@@ -13,7 +13,6 @@ import os.path
 from datetime import datetime
 import numpy as np
 import scipy.sparse as sp
-from sklearn import preprocessing
 from aaerec.datasets import Bags, corrupt_lists
 from aaerec.transforms import lists2sparse
 from aaerec.evaluation import remove_non_missing, evaluate
@@ -33,6 +32,7 @@ import copy
 import gc
 
 from CONSTANTS import *
+from utils.print_utils import normalize_conditional_data_bags, log, save_object
 
 DEBUG_LIMIT = None
 # These need to be implemented in evaluation.py
@@ -264,7 +264,7 @@ CONDITIONS_WITH_TEXT = None
 # init dict with text descriptions of each ICD9 code
 d_icd_code_defs = None
 icd_code_defs = None
-if LOAD_CODE_TEXT_DEFS:
+if LOAD_ICD_CODE_TEXT_DEFS:
     icd_code_defs = pd.read_csv(ICD_CODE_DEFS_PATH, sep='\t')
     d_icd_code_defs = {}
     dup_keys = []
@@ -281,109 +281,39 @@ if LOAD_CODE_TEXT_DEFS:
 
 # Models without/with metadata (empty init here, gets populated later in source)
 MODELS_WITH_HYPERPARAMS = []
+MODEL_NM2IDX = {
+    "matrix-factor": 0,
+    "svd": 1,
 
+    "AE-no-conditions": 2,
+    "AE-demogr-conds": 3,
+    "AE-all-conds": 4,
 
-# plotting & printing
-def log(*print_args, logfile=None):
-    """ Maybe logs the output also in the file `outfile` """
-    if logfile:
-        with open(logfile, 'a') as fhandle:
-            print(*print_args, file=fhandle)
-    print(*print_args)
+    "DAE-no-conditions": 5,
+    "DAE-demogr-conds": 6,
+    "DAE-all-conds": 7,
 
+    "VAE-no-conditions": 8,
+    "VAE-demogr-conds": 9,
+    "VAE-all-conds": 10,
 
+    "AAE-no-conditions": 11,
+    "AAE-demogr-conds": 12,
+    "AAE-all-conds": 13
+}
 
-def print_plot_pat_dict(d1):
-    # Assuming 'my_dict' is your dictionary
-    for key, value in d1.items():
-        if key in ['time_mins_lst', 'los_icu_lst']:
-            # Skip the 'time' key
-            continue
-        if not re.match('.*mean_lst$', key):
-            continue
-
-        if isinstance(value, list) and all(isinstance(item, (int, float)) for item in value):
-            # Plot numeric lists as time series
-            time_values = d1['time_mins_lst']
-            plt.plot(time_values, value, label=key)
-        elif isinstance(value, str):
-            # Display whole strings
-            print(f"{key}: {value}")
-        elif isinstance(value, (int, float)):
-            # Display plain numbers
-            print(f"{key}: {value}")
-        else:
-            # Handle other data types as needed
-            print(f"{key}: {type(value)}")
-
-    plt.xlabel('Time (minutes)')
-    plt.ylabel('Value')
-    plt.legend()
-    plt.show()
-
-
-def plt_pat_histograms_demog(patients):
-    for i in range(0, len(patients)):
-        patient = patients[i]
-        patients[i]['icd9_code_d_lst_len'] = len(patient['icd9_code_d_lst'])
-        patients[i]['icd9_code_p_lst_len'] = len(patient['icd9_code_p_lst'])
-    columns = list(patients[0].keys())
-    str_cols = ['gender', 'ethnicity_grouped', 'admission_type', 'first_icu_stay', 'icd9_code_d_lst', 'icd9_code_p_lst']
-    percent_missing_numeric = lambda x: len(np.where(np.isnan(x))[0]) / len(x)
-    percent_missing_str = lambda x: sum([1 if i == 'nan' else 0 for i in x]) / len(x)
-    missing_fn_mapper = {'str': percent_missing_str, 'num': percent_missing_numeric}
-    for c_col in columns:
-        col_type = 'num'
-        print(c_col)
-        c_vals = [patients[x][c_col] for x in range(0, len(patients))]
-        if c_col == 'icd9_code_d_lst' or c_col == 'icd9_code_p_lst' or c_col == 'los_icu_lst':
-            c_vals = list(np.concatenate(c_vals).flat)
-        elif str.endswith(c_col, '_lst'):
-            continue
-        if c_col in str_cols:
-            col_type = 'str'
-            c_vals = [str(i) for i in c_vals]
-        percent_missing = missing_fn_mapper[col_type](c_vals)
-
-        if c_col == 'age':
-            c_vals = np.multiply(np.round(np.divide(c_vals, 5)), 5)  # bin ages into 5-year groups
-        n_uniq_vals = len(pd.Series(c_vals).value_counts())
-        plt.figure(figsize=(7, 7))
-        plt.grid(True, alpha=0.5, axis='y', which='both', linestyle='--', linewidth=2)
-        plt.hist(c_vals, bins=min(32, n_uniq_vals), facecolor='#0d65f2', edgecolor='black', alpha=0.85, linewidth=1)
-
-        plt.xlabel(c_col)
-        plt.ylabel('Frequency')
-        plt.title('Histogram of {} (missing = %{:.2f})'.format(c_col, percent_missing * 100))
-        plt.savefig('../../plt/plots/demographics/histograms/{}.png'.format(c_col), bbox_inches='tight')
-        plt.show()
-
-
-# I/O and processing
-def save_object(obj, filename):
-    with open(filename, 'wb') as outp:  # Overwrites any existing file.
-        pickle.dump(obj, outp, pickle.HIGHEST_PROTOCOL)
-
-
-
-def normalize_conditional_data_bags(bags):
-    for k in list(bags.owner_attributes.keys()):
-        if k in ['note_embeddings', 'ICD9_defs_txt', 'gender', 'ethnicity_grouped', 'admission_type', 'icd9_code_d_lst', 'icd9_code_p_lst',
-                 'los_icu_lst', 'time_mins_lst', 'icu_stay_start_lst', 'icu_stay_stop_lst']:
-            continue
-        c_vals = list(bags.owner_attributes[k].values())
-        c_vals = np.nan_to_num(np.array(c_vals))
-        c_vals = preprocessing.normalize([c_vals])[0].tolist()
-        c_keys = list(bags.owner_attributes[k].keys())
-        bags.owner_attributes[k] = {c_keys[i]: c_vals[i] for i in range(len(c_keys))}
-    return bags
-
-
-def prepare_evaluation_kfold_cv(bags, n_folds=5, n_items=None, min_count=None, drop=1, max_codes =None):
+def prepare_evaluation_kfold_cv(bags, n_folds=5, min_count=None, drop=1, max_codes=None):
     """
-    Split data into train and dev set.
-    Build vocab on train set and applies it to both train and test set.
+    Split data into train val and test sets
+    Build vocab on train set and applies it to train, val and test set.
+    Args:
+        bags (bags): bags of records
+        n_folds (int): number of folds
+        min_count (int): min number of times an item must have occurred in the train set before it gets considered further
+        drop (int/float): how many items should be masked. when 0 < drop < 1, hides percentage of items per record, when drop > 1 hides that many items in each record
+        max_codes (int): max number of unique items to consider (i.e., consider only the top N most frequently occurring items)
     """
+
     # Split 10% validation data.
     train_sets, val_sets, test_sets = bags.create_kfold_train_validate_test(n_folds=n_folds)
     for i in range(n_folds):
@@ -397,21 +327,18 @@ def prepare_evaluation_kfold_cv(bags, n_folds=5, n_items=None, min_count=None, d
         train_set = train_sets[i]
         test_set = test_sets[i]
         val_set = val_sets[i]
-
         vocab, __counts = train_set.build_vocab(max_features=max_codes, min_count=min_count, apply=False)
-
         # Apply vocab (turn track ids into indices)
         train_set = train_set.apply_vocab(vocab)
         # Discard unknown tokens in the test set
         test_set = test_set.apply_vocab(vocab)
         val_set = val_set.apply_vocab(vocab)
-
         # Corrupt sets (currently set to remove 50% of item list items)
         print("Drop parameter:", drop)
 
         # corrupt test
         # todo: this needs to corrupt with repeating items into account! right now it messes things up
-        noisy, missing = corrupt_lists(test_set.data, drop=drop) # 64 [50, 98, 192, 62, 3, 193, 26, 149, 67, 6, 86, 86, 29, 1, 71, 36, 9, 230, 86]
+        noisy, missing = corrupt_lists(test_set.data, drop=drop)
         # some entries might have too few items to drop, resulting in empty missing and a full noisy
         # remove those from the sets (should be just a few)
         entries_to_keep = np.where([len(missing[i]) != 0 for i in range(len(missing))])[0]
@@ -447,15 +374,12 @@ def prepare_evaluation_kfold_cv(bags, n_folds=5, n_items=None, min_count=None, d
         # Replace test data with corrupted data
         val_set.data = noisy
         missing_val = missing
-
-
         # dont corrut train
         train_sets[i] = train_set
 
         if 'ICD9_defs_txt' in test_set.owner_attributes.keys():
             test_set = adjust_icd_text_defs_post_corrupt(test_set)
             val_set = adjust_icd_text_defs_post_corrupt(val_set)
-
         test_sets[i] = test_set
         val_sets[i] = val_set
 
@@ -465,9 +389,10 @@ def prepare_evaluation_kfold_cv(bags, n_folds=5, n_items=None, min_count=None, d
     return train_sets, val_sets, test_sets, missings_val, missings_test
 
 
-
-
 def adjust_icd_text_defs_post_corrupt(corrupted_set):
+    """
+    Removes the icd code text definition of the icd codes that were removed from a record during corruption/masking
+    """
     for j in range(0, len(corrupted_set.bag_owners)):
         c_hadm_id = corrupted_set.bag_owners[j]
         get_icd_code_from_index = lambda x, y: [y.index2token[c_x] for c_x in x]
@@ -629,12 +554,12 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, logfile, model, hyperparams_
     metrics_per_drop_per_model = []
     train_sets, val_sets, test_sets, y_vals, y_tests = None, None, None, None, None
     # first try to load split datasets from file
-    if False == True and split_sets_filename is not None and os.path.exists(split_sets_filename): # hack : disable splitsets file caching
+    if split_sets_filename is not None and os.path.exists(split_sets_filename):
         with (open(split_sets_filename, "rb")) as openfile:
             train_sets, val_sets, test_sets, y_vals, y_tests = pickle.load(openfile)
     else:
         train_sets, val_sets, test_sets, y_vals, y_tests = prepare_evaluation_kfold_cv(bags, min_count=min_count, drop=drop,
-                                                                               n_folds=n_folds, max_codes = max_codes)
+                                                                               n_folds=n_folds, max_codes= max_codes)
     # create split datasets file if one was not there already
     if split_sets_filename is not None and not os.path.exists(split_sets_filename):
         save_object((train_sets, val_sets, test_sets, y_vals, y_tests), split_sets_filename)
@@ -694,17 +619,16 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, logfile, model, hyperparams_
             model.model_params = hyperparams_to_try
         # for time constraints, just run hyperparams once
         elif hyperparams_to_try is not None and c_fold == 0:
-            log('Optimizing on following hyper params: ', logfile=logfile)
-            log(hyperparams_to_try, logfile=logfile)
-            # use only a third of training set to tune params on (reduce running time)
-            tunning_train_set = train_set.clone(0, int(len(train_set.data) * 1.0))
-            # todo: hack: debug, hardcode hyperparam vals
-            hyperparams_to_try = {'prior': ['gauss'], 'gen_lr': [0.01], 'reg_lr': [0.001],
-                                  'n_code': [200], 'n_epochs': [20],
-                                  'batch_size': [100], 'n_hidden': [500], 'normalize_inputs': [True]}
+            if sum([0 if len(x) == 1 else 1 for x in hyperparams_to_try.values()]) != 0:
+                log('Optimizing on following hyper params: ', logfile=logfile)
+                log(hyperparams_to_try, logfile=logfile)
+                # use only a third of training set to tune params on (reduce running time)
+                tunning_train_set = train_set.clone(0, int(len(train_set.data) * 1.0))
 
-            best_params, _, _ = hyperparam_optimize(model, tunning_train_set, val_set.clone(),
-                                                    tunning_params=hyperparams_to_try, drop=drop)
+                best_params, _, _ = hyperparam_optimize(model, tunning_train_set, val_set.clone(), y_val,
+                                                        tunning_params=hyperparams_to_try, drop=drop)
+            else: # nothing to try, only 1 value for each param provided
+                best_params = {k: v[0] for k, v in hyperparams_to_try.items()}
             log('After hyperparam_optimize, best params: ', logfile=logfile)
             log(best_params, logfile=logfile)
             model.model_params = best_params
@@ -757,13 +681,11 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, logfile, model, hyperparams_
 
 
 
-def hyperparam_optimize(model, train_set, val_set,
+def hyperparam_optimize(model, train_set, val_set, y_val,
                         tunning_params={'prior': ['gauss'], 'gen_lr': [0.001], 'reg_lr': [0.001],
                                         'n_code': [10, 25, 50], 'n_epochs': [20, 50, 100],
                                         'batch_size': [100], 'n_hidden': [100], 'normalize_inputs': [True]},
                         metric='maf1@10', drop=0.5):
-    noisy, y_val = corrupt_lists(val_set.data, drop=drop)
-    val_set.data = noisy
     # assert all(x in list(c_params.keys()) for x in list(tunning_params.keys()))
     # col - hyperparam name, row = specific combination of values to try
     exp_grid_n_combs = [len(x) for x in tunning_params.values()]
@@ -771,7 +693,6 @@ def hyperparam_optimize(model, train_set, val_set,
     l_rows = list(it.product(*tunning_params.values()))
     exp_grid_df = pd.DataFrame(l_rows, columns=exp_grid_cols)
     reses = []
-    y_val = lists2sparse(y_val, val_set.size(1)).tocsr(copy=False)
     # the known items in the test set, just to not recompute
     x_val = lists2sparse(val_set.data, val_set.size(1)).tocsr(copy=False)
 
@@ -864,9 +785,9 @@ def simplify_patients_dict(patients):
 
 # @param fold_index - run a specific fold of CV (-1 = run all folds)
 # see lines at parser.add_argument for param details
-def main(max_codes = 100, min_count=10, drop=0.5, n_folds=5, model_idx=-1, outfile='out.csv', logfile='out.log', fold_index=-1):
+def main(max_codes=100, min_count=10, drop=0.5, n_folds=5, model_idx=-1, outfile='out.csv', logfile='out.log', fold_index=-1):
     """ Main function for training and evaluating AAE methods on MIMIC data """
-    min_count = 10
+    # min_count = 10
     print('drop = {}; min_count = {}, max_codes = {}, n_folds = {}, model_idx = {}'.format(drop, min_count, max_codes, n_folds, model_idx))
     print("Loading data from", IN_DATA_PATH_DEMO_ICD_CODES)
     patients = load(IN_DATA_PATH_DEMO_ICD_CODES)
@@ -887,46 +808,14 @@ def main(max_codes = 100, min_count=10, drop=0.5, n_folds=5, model_idx=-1, outfi
     assert (len(set(ids)) == len(ids))
     del patients
     repeating_items = [i for i,v in enumerate(bags_of_patients) if len(v) - len(set(v)) != 0]
-    pd.Series(bags_of_patients[repeating_items[0]]).value_counts() # p_3491  x 3 times / hadm 131084
+    pd.Series(bags_of_patients[repeating_items[0]]).value_counts()
 
     bags = Bags(bags_of_patients, ids, side_info)  # with conditions, bags_of_patients may have repeating items!
     log("Whole dataset:", logfile=logfile)
 
     log(bags, logfile=logfile)
-    all_codes = [c for c_list in list(side_info['icd9_code_d_lst'].values()) for c in c_list]
-    all_codes += [c for c_list in list(side_info['icd9_code_p_lst'].values()) for c in c_list]
-    t_codes = pd.value_counts(all_codes)
-    n_codes_uniq = len(t_codes)
-    n_codes_all = len(all_codes)
-    code_counts = pd.value_counts(all_codes)
-    # all_unique_codes = set(all_codes)
-    # all_unique_code_defs = set([cd for cd_list in list(side_info['ICD9_defs_txt'].values()) for cd in cd_list])
 
-    log("Total number of codes in current dataset = {}".format(n_codes_all), logfile=logfile)
-    log("Total number of unique codes in current dataset = {}".format(n_codes_uniq), logfile=logfile)
-
-    code_percentages = list(zip(code_counts, code_counts.index))
-    code_percentages = [(val / n_codes_all, code) for val, code in code_percentages]
-    code_percentages_accum = code_percentages
-    for i in range(len(code_percentages)):
-        if i > 0:
-            code_percentages_accum[i] = (
-            code_percentages_accum[i][0] + code_percentages_accum[i - 1][0], code_percentages_accum[i][1])
-        else:
-            code_percentages_accum[i] = (code_percentages_accum[i][0], code_percentages_accum[i][1])
-
-    for i in range(len(code_percentages_accum)):
-        c_code = code_percentages_accum[i][1]
-        c_percentage = code_percentages_accum[i][0]
-        c_def = d_icd_code_defs[c_code] if c_code in d_icd_code_defs.keys() else ''
-        log("{}\t#{}\tcode: {}\t( desc: {})".format(c_percentage, i + 1, c_code, c_def), logfile=logfile)
-        if c_percentage >= 0.5:
-            log("first {} codes account for 50% of all code occurrences".format(i), logfile=logfile)
-            log("Remaining {} codes account for remaining 50% of all code occurrences".format(n_codes_uniq - i),
-                logfile=logfile)
-            log("Last 1000 codes account for only {}% of data".format(
-                (1 - code_percentages_accum[n_codes_uniq - 1000][0]) * 100), logfile=logfile)
-            break
+    print_icd_code_summary_statistics(d_icd_code_defs, logfile, side_info)
 
     log("drop = {}, min_count = {}".format(drop, min_count), logfile=logfile)
     sets_to_try = MODELS_WITH_HYPERPARAMS if model_idx < 0 else [MODELS_WITH_HYPERPARAMS[model_idx]]
@@ -934,18 +823,10 @@ def main(max_codes = 100, min_count=10, drop=0.5, n_folds=5, model_idx=-1, outfi
     for i in list(reversed(models_to_del)):
         del MODELS_WITH_HYPERPARAMS[i]
 
-    #:: Run CV Pipeline
 
     for model, hyperparams_to_try in sets_to_try:
-        # intresect conditions and bags attributes
-        # s_int = set(list(bags.owner_attributes.keys())).intersection(set(list(model.conditions)))
-        # missing_from_model = set(list(bags.owner_attributes.keys())).difference(set(list(model.conditions)))
-        if model.conditions is not None:
+        if model.conditions is not None: # remove conditions that are not present in bags
             missing_from_bags = set(list(model.conditions)).difference(set(list(bags.owner_attributes.keys())))
-            # missing_from_model
-            # {'los_icu_lst', 'los_icu_len', 'heartrate_min_lst_sd', 'icd9_code_p_lst', 'heartrate_min_lst_min',
-            #  'icu_stay_stop_lst', 'heartrate_min_lst_slope', 'heartrate_min_lst_mm', 'icd9_code_d_lst',
-            #  'icu_stay_start_lst', 'time_mins_lst', 'heartrate_min_lst_max'}
             conds_nms_2keep = [condition for condition in model.conditions if str(condition) not in missing_from_bags]
             cond_items_2keep = [c_i for c_i in model.conditions.items() if c_i[0] in conds_nms_2keep]
             model.conditions = ConditionList(cond_items_2keep)
@@ -972,6 +853,57 @@ def main(max_codes = 100, min_count=10, drop=0.5, n_folds=5, model_idx=-1, outfi
         print("DONE")
 
 
+def print_icd_code_summary_statistics(d_icd_code_defs, logfile, side_info, patients = None):
+    all_codes = [y for x in patients for y in x['icd9_code_p_lst'] + x['icd9_code_d_lst']]
+    all_codes = [c for c_list in list(side_info['icd9_code_d_lst'].values()) for c in c_list]
+    all_codes += [c for c_list in list(side_info['icd9_code_p_lst'].values()) for c in c_list]
+    t_codes = pd.value_counts(all_codes)
+    filtered_t_codes = {category: count for category,count in t_codes.items() if count >= 200}
+    filtered_t_codes = pd.Series(filtered_t_codes)
+    x_values = np.arange(len(filtered_t_codes))
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.bar(x_values, filtered_t_codes, width = 1)
+    ax.set_title('ICD9 code frequency')
+    ax.set_ylabel('Counts')
+    ax.set_xlabel('ICD codes')
+    ax.set_xticks([])
+    ax.set_xticklabels([])
+    plt.show()
+    plt.savefig('../../plt/icd9-code-freq-counts-300.png', dpi=300, bbox_inches='tight')
+    # b_chart = filtered_t_codes.plot(kind='bar', width = 0.8)
+    # b_chart
+
+
+    n_codes_uniq = len(t_codes)
+    n_codes_all = len(all_codes)
+    code_counts = pd.value_counts(all_codes)
+    # all_unique_codes = set(all_codes)
+    # all_unique_code_defs = set([cd for cd_list in list(side_info['ICD9_defs_txt'].values()) for cd in cd_list])
+    log("Total number of codes in current dataset = {}".format(n_codes_all), logfile=logfile)
+    log("Total number of unique codes in current dataset = {}".format(n_codes_uniq), logfile=logfile)
+    code_percentages = list(zip(code_counts, code_counts.index))
+    code_percentages = [(val / n_codes_all, code) for val, code in code_percentages]
+    code_percentages_accum = code_percentages
+    for i in range(len(code_percentages)):
+        if i > 0:
+            code_percentages_accum[i] = (
+                code_percentages_accum[i][0] + code_percentages_accum[i - 1][0], code_percentages_accum[i][1])
+        else:
+            code_percentages_accum[i] = (code_percentages_accum[i][0], code_percentages_accum[i][1])
+    for i in range(len(code_percentages_accum)):
+        c_code = code_percentages_accum[i][1]
+        c_percentage = code_percentages_accum[i][0]
+        c_def = d_icd_code_defs[c_code] if c_code in d_icd_code_defs.keys() else ''
+        log("{}\t#{}\tcode: {}\t( desc: {})".format(c_percentage, i + 1, c_code, c_def), logfile=logfile)
+        if c_percentage >= 0.5:
+            log("first {} codes account for 50% of all code occurrences".format(i), logfile=logfile)
+            log("Remaining {} codes account for remaining 50% of all code occurrences".format(n_codes_uniq - i),
+                logfile=logfile)
+            log("Last 1000 codes account for only {}% of data".format(
+                (1 - code_percentages_accum[n_codes_uniq - 1000][0]) * 100), logfile=logfile)
+            break
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-o', '--outfile',
@@ -982,20 +914,24 @@ if __name__ == '__main__':
                         default='../run-logs/test_run_{}.log'.format(datetime.now().strftime("%Y-%m-%d-%H:%M")))
     parser.add_argument('-m', '--min-count', type=int,
                         default=50,
-                        help="Minimum count of items")
+                        help="Minimum frequency count a code should have before it is used")
     parser.add_argument('-mc', '--max-codes', type=int,
                         default=100,
                         help="Use only top n most frequent codes")
     parser.add_argument('-dr', '--drop', type=float,
-                        help='Drop parameter', default=0.5)
+                        default=0.5,
+                        help='Drop parameter - when between 0 and 1 behaves as percentage drop, when greater behaves as number of codes to drop.')
     parser.add_argument('-nf', '--n_folds', type=int,
-                        help='Number of folds', default=5)
-    parser.add_argument('-mn', '--model_name', type=int, help=f'Name of model to use. Allowed values = {model_name_to_idx_mapper.keys()}',
-                        default="AAE-all-conds")
-    parser.add_argument('-le', '--load_embeddings', type=int, help='Load embeddings',
-                        default=0)
-    parser.add_argument('-fi', '--fold_index', type=int, help='cv-fold to run',
-                        default=-1)
+                        help='Number of folds in cross-validation', default=5)
+    parser.add_argument('-mn', '--model_name', type=str,
+                        default="AAE-all-conds",
+                        help=f'Name of model to use. Allowed values = {MODEL_NM2IDX.keys()}')
+    parser.add_argument('-le', '--load_embeddings', type=int,
+                        default=0,
+                        help='Load w2v embeddings?',)
+    parser.add_argument('-fi', '--fold_index', type=int,
+                        default=-1,
+                        help='Run a specific fold of cv. -1 to run all folds.')
     args = parser.parse_args()
     print(args)
 
@@ -1013,128 +949,54 @@ if __name__ == '__main__':
 
     else:
         CONDITIONS_WITH_TEXT = CONDITIONS
+
+    HPS_COUNTBASED = {"order": [1, 2, 3, 4, 5]}
+    HPS_SVD = {"dims": [50, 100, 200, 500, 1000]}
+    HPS_AE = {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+          'n_code': [100, 200],
+          'n_epochs': [10, 20],
+          'batch_size': [50, 100],
+          'n_hidden': [200, 500],
+          'normalize_inputs': [True]}
+    HPS_AAE = {'prior': ['categorical'], # gauss, bernoulli
+          'gen_lr': [0.01], # encoder/decoder LR
+          'reg_lr': [0.001], # generator LR
+          'disc_lr': [0.00005], # discriminator LR
+          'n_code': [150], # n of neurons in the last layer of the encoder, and the first layer of the decoder (i.e., the bottleneck)
+          'n_epochs': [70],
+          'batch_size': [200],
+          'n_hidden': [600], # place where magic happens
+          'normalize_inputs': [True]}
+
+
+
     MODELS_WITH_HYPERPARAMS = [
         # *** BASELINES
         # Use no metadata (only item sets)
-        (Countbased(),
-         {"order": [1, 2, 3, 4, 5]}),
+        (Countbased(), HPS_COUNTBASED), # 0
         # Use title (as defined in CONDITIONS above)
-        (SVDRecommender(10, use_title=False),
-         {"dims": [50, 100, 200, 500, 1000]}),
-
+        (SVDRecommender(10, use_title=False), HPS_SVD),
+        # *** BASELINES END
         # *** AEs
-        (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=None, **ae_params),
-         {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200, 500],
-          'normalize_inputs': [True]}),
-        (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS,
-                        **ae_params),
-         {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200, 500],
-          'normalize_inputs': [True]}),
-        (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS_WITH_TEXT,
-                        **ae_params),
-         {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200, 500],
-          'normalize_inputs': [True]}),
-
+        (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=None, **ae_params), HPS_AE),
+        (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS, **ae_params), HPS_AE),
+        (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS_WITH_TEXT, **ae_params), HPS_AE),
         # *** DAEs
-        (DAERecommender(conditions=None, **ae_params),
-         {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200, 500],
-          'normalize_inputs': [True]}),
-        (DAERecommender(conditions=CONDITIONS, **ae_params),
-         {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200, 500],
-          'normalize_inputs': [True]}),
-        (DAERecommender(conditions=CONDITIONS_WITH_TEXT, **ae_params),
-         {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200, 500],
-          'normalize_inputs': [True]}),
-
+        (DAERecommender(conditions=None, **ae_params), HPS_AE),
+        (DAERecommender(conditions=CONDITIONS, **ae_params), HPS_AE),
+        (DAERecommender(conditions=CONDITIONS_WITH_TEXT, **ae_params), HPS_AE),
         # *** VAEs
-        (VAERecommender(conditions=None, **vae_params),
-         {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200, 500],
-          'normalize_inputs': [True]
-          }),
-        (VAERecommender(conditions=CONDITIONS, **vae_params),
-         {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200, 500],
-          'normalize_inputs': [True]
-          }),
-        (VAERecommender(conditions=CONDITIONS_WITH_TEXT, **vae_params),
-         {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200, 500],
-          'normalize_inputs': [True]
-          }),
-
+        (VAERecommender(conditions=None, **vae_params), HPS_AE),
+        (VAERecommender(conditions=CONDITIONS, **vae_params), HPS_AE),
+        (VAERecommender(conditions=CONDITIONS_WITH_TEXT, **vae_params), HPS_AE),
         # *** AAEs
-        (AAERecommender(adversarial=True, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=None, **ae_params),
-         {'prior': ['gauss'],
-          'gen_lr': [0.001, 0.01],
-          'reg_lr': [0.001, 0.01],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200, 500],
-          'normalize_inputs': [True]},),
-        (
-            AAERecommender(adversarial=True, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS, # index = 12
-                           **ae_params),
-            {'prior': ['gauss'],
-             'gen_lr': [0.001, 0.01],
-             'reg_lr': [0.001, 0.01],
-             'n_code': [100, 200],
-             'n_epochs': [10, 20],
-             'batch_size': [50, 100],
-             'n_hidden': [200, 500],
-             'normalize_inputs': [True]},),
-        (AAERecommender(adversarial=True, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS_WITH_TEXT, # index =13
-                        **ae_params),
-         {'prior': ['gauss'],
-          'gen_lr': [0.001, 0.01],
-          'reg_lr': [0.001, 0.01],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200, 500],
-          'normalize_inputs': [True]},),
+        (AAERecommender(adversarial=True, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=None, **ae_params), HPS_AAE),
+        (AAERecommender(adversarial=True, prior='gauss', gen_lr=0.1, reg_lr=0.00001, conditions=CONDITIONS, **ae_params), HPS_AAE), # index = 12
+        (AAERecommender(adversarial=True, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS_WITH_TEXT, **ae_params), HPS_AAE),
     ]
 
-    model_name_to_idx_mapper = {
-        "AAE-no-conditions" : 11,
-        "AAE-demogr-conds" : 12,
-        "AAE-all-conds" : 13
-    }
 
 
-    main(outfile=args.outfile, logfile=args.logfile, min_count=args.min_count, drop=args.drop, n_folds=args.n_folds, model_idx=model_name_to_idx_mapper[args.model_idx],
+
+    main(outfile=args.outfile, logfile=args.logfile, min_count=args.min_count, drop=args.drop, n_folds=args.n_folds, model_idx=MODEL_NM2IDX[args.model_name],
          fold_index=args.fold_index, max_codes=args.max_codes)
