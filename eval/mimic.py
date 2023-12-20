@@ -36,7 +36,7 @@ from utils.print_utils import normalize_conditional_data_bags, log, save_object
 
 DEBUG_LIMIT = None
 # These need to be implemented in evaluation.py
-METRICS = ['map', 'map@5', 'maf1', 'maf1@5']
+METRICS = ['map@5', 'maf1@5']
 VECTORS = []
 # placeholder default hyperparams values - later get replaced with optimal hyperparam values chosen from list
 # (see lines defining MODELS_WITH_HYPERPARAMS)
@@ -60,7 +60,7 @@ vae_params = {
 # commented out conditions can be used if compute resources permitting
 # TODO: rethink the embedding_dim for these! you only need 1 dimension for a categorical with 2 categories, but maybe adding a few extra dimensions is helpful?
 CONDITIONS = ConditionList([
-    ('note_embeddings', ContinuousCondition(sparse=False, size_increment=128)), # todo - make this condition work!
+    #('note_embeddings', ContinuousCondition(sparse=False, size_increment=128)), # todo - make this condition work!
     ('gender', CategoricalCondition(embedding_dim=3, sparse=True, embedding_on_gpu=True)),
     ('ethnicity_grouped', CategoricalCondition(embedding_dim=7, sparse=True, embedding_on_gpu=True)),
     ('admission_type', CategoricalCondition(embedding_dim=5, sparse=True, embedding_on_gpu=True)),
@@ -806,16 +806,18 @@ def main(max_codes=100, min_count=10, drop=0.5, n_folds=5, model_idx=-1, outfile
 
     bags_of_patients, ids, side_info, d_icd_code_defs = unpack_patients(patients, icd_code_defs, note_embs)  # with conditions
     assert (len(set(ids)) == len(ids))
+    print_icd_code_summary_statistics(d_icd_code_defs, logfile, side_info, patients)
     del patients
-    repeating_items = [i for i,v in enumerate(bags_of_patients) if len(v) - len(set(v)) != 0]
-    pd.Series(bags_of_patients[repeating_items[0]]).value_counts()
+
+    # repeating_items = [i for i,v in enumerate(bags_of_patients) if len(v) - len(set(v)) != 0]
+    # pd.Series(bags_of_patients[repeating_items[0]]).value_counts()
 
     bags = Bags(bags_of_patients, ids, side_info)  # with conditions, bags_of_patients may have repeating items!
     log("Whole dataset:", logfile=logfile)
 
     log(bags, logfile=logfile)
 
-    print_icd_code_summary_statistics(d_icd_code_defs, logfile, side_info)
+
 
     log("drop = {}, min_count = {}".format(drop, min_count), logfile=logfile)
     sets_to_try = MODELS_WITH_HYPERPARAMS if model_idx < 0 else [MODELS_WITH_HYPERPARAMS[model_idx]]

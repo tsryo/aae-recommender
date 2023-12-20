@@ -6,6 +6,8 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 # sklearn
 import sklearn
+
+from CONSTANTS import ALLOW_REPEATING_ITEMS
 from .ub import AutoEncoderMixin
 
 # numpy
@@ -964,14 +966,20 @@ class AAERecommender(Recommender):
         else:
             condition_data = None
 
-        # todo: compute max num of repetitions for each item
+        # todo: currently we compute max num of repetitions for each item and use that as a multiplier
+        # todo: using tf-idf here would be better
+        n_occurs_l = None
+        if ALLOW_REPEATING_ITEMS:
+            n_occurs_l = [ max([x.count(c_i) for x in training_set.data]) for c_i in training_set.vocab.values()]
+            n_occurs_l = torch.tensor(n_occurs_l)
+            n_occurs_l = n_occurs_l.view(1, -1)
 
-        n_occurs_l = [ max([x.count(c_i) for x in training_set.data]) for c_i in training_set.vocab.values()]
-        n_occurs_l = torch.tensor(n_occurs_l)
-        n_occurs_l = n_occurs_l.view(1, -1)
         if self.adversarial:
             # Pass conditions through along with hyperparams
-            self.model = AdversarialAutoEncoder(conditions=self.conditions, decoder_out_multiplier=n_occurs_l, **self.model_params)
+            if ALLOW_REPEATING_ITEMS:
+                self.model = AdversarialAutoEncoder(conditions=self.conditions, decoder_out_multiplier=n_occurs_l, **self.model_params)
+            else:
+                self.model = AdversarialAutoEncoder(conditions=self.conditions, **self.model_params)
         else:
             # Pass conditions through along with hyperparams
             self.model = AutoEncoder(conditions=self.conditions, **self.model_params)
