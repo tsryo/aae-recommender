@@ -337,7 +337,6 @@ def prepare_evaluation_kfold_cv(bags, n_folds=5, min_count=None, drop=1, max_cod
         print("Drop parameter:", drop)
 
         # corrupt test
-        # todo: this needs to corrupt with repeating items into account! right now it messes things up
         noisy, missing = corrupt_lists(test_set.data, drop=drop)
         # some entries might have too few items to drop, resulting in empty missing and a full noisy
         # remove those from the sets (should be just a few)
@@ -374,7 +373,7 @@ def prepare_evaluation_kfold_cv(bags, n_folds=5, min_count=None, drop=1, max_cod
         # Replace test data with corrupted data
         val_set.data = noisy
         missing_val = missing
-        # dont corrut train
+        # dont corrupt train
         train_sets[i] = train_set
 
         if 'ICD9_defs_txt' in test_set.owner_attributes.keys():

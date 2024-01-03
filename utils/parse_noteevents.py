@@ -30,7 +30,7 @@ RUN_STEP2 = False
 RUN_STEP3 = False
 RUN_STEP4 = False
 RUN_STEP5 = False
-RUN_STEP6 = True
+RUN_STEP6 = False
 
 
 # Declare constants
@@ -408,7 +408,7 @@ if RUN_STEP3:
     print(f"Wrote hadm_ids from notes that are  missing codes in {HADM_IDS_FROM_TEXT_MISSING_CODES_FILENAME}")
 
 if RUN_STEP4:
-    print(f"Read {CONCAT_JSON_FILENAME} , remove entries for which we have no icd_codes in {IN_DATA_PATH_DEMO_ICD_CODES} [recorded in {HADM_IDS_FROM_TEXT_MISSING_CODES_FILENAME}]")
+    print(f"Read {CONCAT_JSON_FILENAME}, remove entries for which we have no icd_codes in {IN_DATA_PATH_DEMO_ICD_CODES} [recorded in {HADM_IDS_FROM_TEXT_MISSING_CODES_FILENAME}]")
     # read HADM_IDS_FROM_TEXT_MISSING_CODES_FILENAME into list
     hadm_ids_to_remove = read_specific_lines(HADM_IDS_FROM_TEXT_MISSING_CODES_FILENAME, line_numbers=[0])
     hadm_ids_to_remove = hadm_ids_to_remove[0]
@@ -540,7 +540,7 @@ if RUN_STEP6:
             return v
 
 
-    print(f"Read {CONCAT_JSON_PROCESSED_FILENAME} and try  to learn representation via transformer [bert]")
+    print(f"Read {CONCAT_JSON_PROCESSED_FILENAME} and try to learn representation via transformer [bert]")
     logging.set_verbosity_error()
     logging.set_verbosity_warning()
 
@@ -625,7 +625,7 @@ if RUN_STEP6:
     gc.collect()
 
 
-print("DONE DONE")
+print("Done")
 end_time_seconds = int(time.time())
 print(f"execution took {format_time(end_time_seconds-start_time_seconds)}")
 

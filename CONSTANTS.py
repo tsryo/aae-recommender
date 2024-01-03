@@ -4,7 +4,7 @@ IN_DATA_TEXT_PATH = "../../data/MIMIC/noteevents.csv"
 # processed data
 ICD_CODE_DEFS_PATH = "../../data/d_DIAG_PROCED.csv"
 IN_DATA_PATH_VITALS = "../../data/vitals.csv"
-IN_DATA_PATH_DEMO_ICD_CODES = "../../data/test10000.json" # diagnoses_procedures_icd_icu_staydetail_all_14Jul.json
+IN_DATA_PATH_DEMO_ICD_CODES = "../../data/diagnoses_procedures_icd_icu_staydetail_all_14Jul.json" # test10000.json
 
 EMBEDDINGS_FILENAME = "../../data/MIMIC/roberta_base_embeddings.json"
 
