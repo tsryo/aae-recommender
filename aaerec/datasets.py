@@ -84,7 +84,7 @@ def filter_length(lists, min_length, *supplements):
 
 
 
-def split_list(s, criterion, treat_as_set = False):
+def split_list(s, criterion, treat_as_set=True):
     """
     Splits a list/set according to criterion
     if criterion is float: toss a coin for each element
@@ -129,7 +129,7 @@ def split_list(s, criterion, treat_as_set = False):
 
 
 
-def corrupt_lists(sets, drop=1, treat_as_set=False):
+def corrupt_lists(sets, drop=1, treat_as_set=True):
     """
 
     Splits a list of sets/lists into two sub-sets each,
@@ -414,8 +414,6 @@ class Bags(object):
                 only_none_keys_to_remove = [k for k in train_attributes.keys() if sum([ 0 if x1 is None else 1 for x1 in list(train_attributes[k].values())] ) == 0 ]
                 for k in only_none_keys_to_remove:
                     train_attributes.pop(k, None)
-
-
                 test_attributes = {
                                     k: {
                                             owner: self.owner_attributes[k][owner] if
@@ -433,7 +431,6 @@ class Bags(object):
             test_set = Bags(test_data, test_owners, owner_attributes=test_attributes)
             train_sets.append(train_set)
             test_sets.append(test_set)
-
         return train_sets, test_sets
 
     def create_kfold_train_validate_test(self, n_folds = 1):
