@@ -65,6 +65,12 @@ class ConditionList(OrderedDict):
         super(ConditionList, self).__init__(items)
         assert all(isinstance(v, ConditionBase) for v in self.values())
 
+    def append(self, items):
+        for item in items:
+            self[item[0]] = item[1]
+        new_o = ConditionList(self)
+        return new_o
+
     def fit(self, raw_inputs):
         """ Fits all conditions to data """
         assert len(raw_inputs) == len(self)
@@ -568,6 +574,10 @@ class ContinuousCondition(ConcatenationBasedConditioning):
         # We take care of vocab handling & padding ourselves
         assert "padding_idx" not in embedding_params, "Padding is fixed with token 0"
         self.embedding_params = embedding_params
+        if "size_increment" in embedding_params:
+            self.size_increment_val = embedding_params["size_increment"]
+        else:
+            self.size_increment_val = 1
 
         assert reduce is None or reduce in ['mean', 'sum', 'max'], "Reduce neither None nor in 'mean','sum','max'"
         self.reduce = reduce
@@ -618,6 +628,8 @@ class ContinuousCondition(ConcatenationBasedConditioning):
             h = getattr(h, self.reduce)(1)
         if self.use_cuda:
             h = h.cuda()
+        if len(h.shape) > 1:
+            return h
         return h[:, None]
 
     def zero_grad(self):
@@ -629,7 +641,7 @@ class ContinuousCondition(ConcatenationBasedConditioning):
         return None
 
     def size_increment(self):
-        return 1
+        return self.size_increment_val
 
 
 class Condition(ConditionBase):

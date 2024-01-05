@@ -3,12 +3,13 @@ from datetime import timedelta
 import os
 import random
 import sys
+import pandas as pd
 from abc import ABC, abstractmethod
 from sklearn.preprocessing import minmax_scale
 import numpy as np
 import scipy.sparse as sp
 from . import rank_metrics_with_std as rm
-from .datasets import corrupt_sets
+from .datasets import corrupt_lists
 from .transforms import lists2sparse
 from aaerec.rank_metrics_with_std import mean_average_f1
 
@@ -16,7 +17,7 @@ from aaerec.rank_metrics_with_std import mean_average_f1
 def argtopk(X, k):
     """
     Picks the top k elements of (sparse) matrix X
-
+    modified to work with repeating elements
     >>> X = np.arange(10).reshape(1, -1)
     >>> i = argtopk(X, 3)
     >>> i
@@ -40,18 +41,39 @@ def argtopk(X, k):
            [5, 4, 3]])
     """
     assert len(X.shape) == 2, "X should be two-dimensional array-like"
+    assert k is None or k > 0, "k should be positive integer or None"
     rows = np.arange(X.shape[0])[:, np.newaxis]
-    if k is None or k >= X.size:
-        ind = np.argsort(X, axis=1)[:, ::-1]
-        return rows, ind
 
-    assert k > 0, "k should be positive integer or None"
+    new_inds = None # handle repeating elements
+    c_max = int(np.ceil(np.max(X)))
+    for r_i in range(X.shape[0]):
+        c_x = X[r_i]
+        n_x = c_x.copy()
+        ns_x = c_x.copy()
+        for nr_i in range(c_max):
+            n_x = n_x - 1
+            n_x[n_x < 0] = 0
+            ns_x = np.vstack((ns_x, n_x))
+        ns_x_flat = ns_x.flatten()
+        new_ind = np.argsort(-ns_x_flat, axis=0)
+        new_ind = new_ind % X.shape[1]
+        if new_inds is not None:
+            new_inds = np.vstack((new_inds, new_ind))
+        else:
+            new_inds = new_ind
+
+    if k is not None and k < X.size:
+        new_inds = new_inds[:, :k]
+
+    return rows, new_inds # new_inds = rank score
 
 
-    ind = np.argpartition(X, -k, axis=1)[:, -k:]
-    # sort indices depending on their X values
-    cols = ind[rows, np.argsort(X[rows, ind], axis=1)][:, ::-1]
-    return rows, cols
+
+    # # todo: handle repeating items
+    # ind = np.argpartition(X, -k, axis=1)[:, -k:]
+    # # sort indices depending on their X values
+    # cols = ind[rows, np.argsort(X[rows, ind], axis=1)][:, ::-1]
+    # return rows, cols
 
 
 class Metric(ABC):
@@ -78,11 +100,22 @@ class RankingMetric(Metric):
         >>> Y_true = np.array([[1,0,0],[0,0,1]])
         >>> Y_pred = np.array([[0.2,0.3,0.1],[0.2,0.5,0.7]])
         >>> RankingMetric(k=2)(Y_true, Y_pred)
-        array([[0, 1],
-               [1, 0]])
-        """
+        array([[0, 1], # because the best predicted item is the 2nd (0.3), so at first returned relevance score  will be 0, next one will be 1 
+               [1, 0]])  # first item returned will be the 3rd (0.7), so that is a rs of 1 already there
+        """ # y_true[3,1] = 2; [3,0/2] = 1; y_pred[3,] = argsort = 10,  2,  5,  0,  9, 12,  1, 11,  6,  3,  4,  7,  8, 13, 14, 15; then we expect rs [0, 1, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0
         ind = argtopk(y_pred, self.k)
+
         rs = y_true[ind]
+        # n_splits = int(rs.shape[1] / y_true.shape[1])
+        # if n_splits != 0:
+        #     portions = np.split(rs, n_splits, axis=1)
+        #     new_rs = None
+        #     for portion in portions:
+        #         if new_rs is None:
+        #             new_rs = portion
+        #         else:
+        #             new_rs = new_rs + portion
+        #     return new_rs
         return rs
 
 
@@ -201,12 +234,14 @@ def remove_non_missing(Y_pred, X_test, copy=True):
     array([[0.    , 0.9375, 0.    ],
            [1.    , 0.    , 0.5   ]])
     """
-    Y_pred_scaled = minmax_scale(Y_pred,
-                                 feature_range=(0, 1),
-                                 axis=1,  # Super important!
-                                 copy=copy)
+    Y_pred_scaled = Y_pred.copy()
+    # Y_pred_scaled = minmax_scale(Y_pred,
+    #                              feature_range=(0, 1),
+    #                              axis=1,  # Super important!
+    #                              copy=copy)
     # we remove the ones that were already present in the orig set
-    Y_pred_scaled[X_test.nonzero()] = 0.
+    Y_pred_scaled[X_test.nonzero()] -= 1.
+    Y_pred_scaled[Y_pred_scaled < 0] = 0
     return Y_pred_scaled
 
 
@@ -217,6 +252,10 @@ def evaluate(ground_truth, predictions, metrics, batch_size=None):
     """
 
     n_samples = ground_truth.shape[0]
+    # x = pd.DataFrame(ground_truth.toarray())
+    # # todo: hack - make more robust based on drop percentage
+    # x = x[x.sum(axis=1) >= 1]
+
     assert predictions.shape[0] == n_samples
 
     metrics = [m if callable(m) else METRICS[m] for m in metrics]
@@ -313,7 +352,7 @@ class Evaluation(object):
         print("Test:", test_set, file=log_fh)
         print("Drop parameter:", drop)
 
-        noisy, missing = corrupt_sets(test_set.data, drop=drop)
+        noisy, missing = corrupt_lists(test_set.data, drop=drop)
 
         assert len(noisy) == len(missing) == len(test_set)
 
