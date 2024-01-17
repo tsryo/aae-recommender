@@ -24,7 +24,7 @@ from aaerec.vae import VAERecommender
 from aaerec.dae import DAERecommender
 from gensim.models.keyedvectors import KeyedVectors
 from aaerec.condition import ConditionList, PretrainedWordEmbeddingCondition, CategoricalCondition, Condition, ContinuousCondition
-from eval.fiv import load
+from irgan.utils import load
 from matplotlib import pyplot as plt
 import itertools as it
 import pandas as pd
@@ -63,7 +63,7 @@ CONDITIONS = ConditionList([
     ('admission_type', CategoricalCondition(embedding_dim=5, sparse=True, embedding_on_gpu=True)),
     ('los_hospital', ContinuousCondition(sparse=True)),
     ('age', ContinuousCondition(sparse=True)),
-    ('seq_num_len', ContinuousCondition(sparse=True)),
+    # ('seq_num_len', ContinuousCondition(sparse=True)),
     # ('los_icu_lst_slope', ContinuousCondition(sparse=True)),
     # ('heartrate_min_lst_slope', ContinuousCondition(sparse=True)),
     # ('heartrate_max_lst_slope', ContinuousCondition(sparse=True)),
@@ -278,7 +278,7 @@ MODELS_WITH_HYPERPARAMS = []
 
 def normalize_conditional_data_bags(bags):
     for k in list(bags.owner_attributes.keys()):
-        if k in ['ICD9_defs_txt', 'gender', 'ethnicity_grouped', 'admission_type', 'icd9_code_lst']:
+        if k in ['ICD9_defs_txt', 'gender', 'ethnicity_grouped', 'admission_type', 'icd9_code_d_lst', 'icd9_code_p_lst']:
             continue
         c_vals = list(bags.owner_attributes[k].values())
         c_vals = np.nan_to_num(np.array(c_vals))
@@ -343,7 +343,7 @@ def adjust_icd_text_defs_post_corrupt(corrupted_set):
         c_icd_codes = get_icd_code_from_index(corrupted_set.data[j], corrupted_set)
         c_code_defs = [re.sub(r'[^\w\s]', '', d_icd_code_defs[x].lower()) if x in d_icd_code_defs.keys() else '' for
                        x in c_icd_codes]
-        corrupted_set.owner_attributes['ICD9_defs_txt'][c_hadm_id] = (' '.join(c_code_defs))
+        # corrupted_set.owner_attributes['ICD9_defs_txt'][c_hadm_id] = (' '.join(c_code_defs))
     return corrupted_set
 
 def log(*print_args, logfile=None):
@@ -359,14 +359,16 @@ def unpack_patients(patients, icd_code_defs = None):
     format. It is not mandatory that patients are sorted.
     """
     bags_of_codes, ids = [], []
-    other_attributes = { 'ICD9_defs_txt': {},
+    other_attributes = { #'ICD9_defs_txt': {},
                         'gender': {},
                         'los_hospital': {},
                         'age': {},
                         'ethnicity_grouped': {},
                         'admission_type': {},
-                        'seq_num_len': {},
-                        'icd9_code_lst': {},#'los_icu_lst': {},'heartrate_min_lst': {},'heartrate_max_lst': {},'heartrate_mean_lst': {},'sysbp_min_lst': {},'sysbp_max_lst': {},'sysbp_mean_lst': {},'diasbp_min_lst': {},'diasbp_max_lst': {},'diasbp_mean_lst': {},'meanbp_min_lst': {},'meanbp_max_lst': {},'meanbp_mean_lst': {},'resprate_min_lst': {},'resprate_max_lst': {},'resprate_mean_lst': {},'tempc_min_lst': {},'tempc_max_lst': {},'tempc_mean_lst': {},'spo2_min_lst': {},'spo2_max_lst': {},'spo2_mean_lst': {},'glucose_min_lst': {},'glucose_max_lst': {},'glucose_mean_lst': {},
+                        # 'seq_num_len': {},
+                        'icd9_code_d_lst': {},
+                        'icd9_code_p_lst': {},
+                        #'los_icu_lst': {},'heartrate_min_lst': {},'heartrate_max_lst': {},'heartrate_mean_lst': {},'sysbp_min_lst': {},'sysbp_max_lst': {},'sysbp_mean_lst': {},'diasbp_min_lst': {},'diasbp_max_lst': {},'diasbp_mean_lst': {},'meanbp_min_lst': {},'meanbp_max_lst': {},'meanbp_mean_lst': {},'resprate_min_lst': {},'resprate_max_lst': {},'resprate_mean_lst': {},'tempc_min_lst': {},'tempc_max_lst': {},'tempc_mean_lst': {},'spo2_min_lst': {},'spo2_max_lst': {},'spo2_mean_lst': {},'glucose_min_lst': {},'glucose_max_lst': {},'glucose_mean_lst': {},
                         'los_icu_lst_slope': {}, 'heartrate_min_lst_slope': {}, 'heartrate_max_lst_slope': {}, 'heartrate_mean_lst_slope': {}, 'sysbp_min_lst_slope': {}, 'sysbp_max_lst_slope': {}, 'sysbp_mean_lst_slope': {}, 'diasbp_min_lst_slope': {}, 'diasbp_max_lst_slope': {}, 'diasbp_mean_lst_slope': {}, 'meanbp_min_lst_slope': {}, 'meanbp_max_lst_slope': {}, 'meanbp_mean_lst_slope': {}, 'resprate_min_lst_slope': {}, 'resprate_max_lst_slope': {}, 'resprate_mean_lst_slope': {}, 'tempc_min_lst_slope': {}, 'tempc_max_lst_slope': {}, 'tempc_mean_lst_slope': {}, 'spo2_min_lst_slope': {}, 'spo2_max_lst_slope': {}, 'spo2_mean_lst_slope': {}, 'glucose_min_lst_slope': {}, 'glucose_max_lst_slope': {}, 'glucose_mean_lst_slope': {},
                         'los_icu_lst_mean': {}, 'heartrate_min_lst_mean': {}, 'heartrate_max_lst_mean': {}, 'heartrate_mean_lst_mean': {}, 'sysbp_min_lst_mean': {}, 'sysbp_max_lst_mean': {}, 'sysbp_mean_lst_mean': {}, 'diasbp_min_lst_mean': {}, 'diasbp_max_lst_mean': {}, 'diasbp_mean_lst_mean': {}, 'meanbp_min_lst_mean': {}, 'meanbp_max_lst_mean': {}, 'meanbp_mean_lst_mean': {}, 'resprate_min_lst_mean': {}, 'resprate_max_lst_mean': {}, 'resprate_mean_lst_mean': {},
                         'los_icu_lst_sd': {}, 'heartrate_min_lst_sd': {}, 'heartrate_max_lst_sd': {}, 'heartrate_mean_lst_sd': {}, 'sysbp_min_lst_sd': {}, 'sysbp_max_lst_sd': {}, 'sysbp_mean_lst_sd': {}, 'diasbp_min_lst_sd': {}, 'diasbp_max_lst_sd': {}, 'diasbp_mean_lst_sd': {}, 'meanbp_min_lst_sd': {}, 'meanbp_max_lst_sd': {}, 'meanbp_mean_lst_sd': {}, 'resprate_min_lst_sd': {}, 'resprate_max_lst_sd': {}, 'resprate_mean_lst_sd': {}, 'tempc_min_lst_sd': {}, 'tempc_max_lst_sd': {}, 'tempc_mean_lst_sd': {}, 'spo2_min_lst_sd': {}, 'spo2_max_lst_sd': {}, 'spo2_mean_lst_sd': {}, 'glucose_min_lst_sd': {}, 'glucose_max_lst_sd': {}, 'glucose_mean_lst_sd': {},
@@ -395,19 +397,19 @@ def unpack_patients(patients, icd_code_defs = None):
         # Put all subjects assigned to the patient in here
         try:
             # Subject may be missing
-            bags_of_codes.append(patient["icd9_code_lst"])
+            bags_of_codes.append(patient["icd9_code_d_lst"] + patient["icd9_code_p_lst"])
         except KeyError:
             bags_of_codes.append([])
         #  features that can be easily used: age, gender, ethnicity, adm_type, icu_stay_seq, hosp_stay_seq
         # Use dict here such that we can also deal with unsorted ids
         c_hadm_id = patient["hadm_id"]
-        for c_var in list(other_attributes.keys()):
-            if c_var == "ICD9_defs_txt":
+        for c_var in other_attributes.keys():
+            if c_var == "ICD9_defs_txt" or c_var not in patient.keys():
                 continue
             other_attributes[c_var][c_hadm_id] = patient[c_var]
-        c_icd_codes = other_attributes['icd9_code_lst'][c_hadm_id]
-        c_code_defs = [re.sub(r'[^\w\s]', '', d_icd_code_defs[x].lower()) if x in d_icd_code_defs.keys() else '' for x in c_icd_codes]
-        other_attributes['ICD9_defs_txt'][c_hadm_id] = (' '.join(c_code_defs))
+        # c_icd_codes = other_attributes['icd9_code_lst'][c_hadm_id]
+        # c_code_defs = [re.sub(r'[^\w\s]', '', d_icd_code_defs[x].lower()) if x in d_icd_code_defs.keys() else '' for x in c_icd_codes]
+        # other_attributes['ICD9_defs_txt'][c_hadm_id] = (' '.join(c_code_defs))
     # bag_of_codes and ids should have corresponding indices
     return bags_of_codes, ids, other_attributes, d_icd_code_defs
 
@@ -415,10 +417,10 @@ def unpack_patients(patients, icd_code_defs = None):
 def plot_patient_hists(patients):
     for i in range(0,len(patients)):
         patient = patients[i]
-        icd9_code_lst_len = len(patient['icd9_code_lst'])
+        icd9_code_lst_len = len(patient['icd9_code_d_lst']) + len(patient['icd9_code_p_lst'])
         patients[i]['icd9_code_lst_len'] = icd9_code_lst_len
     columns = list(patients[0].keys())
-    str_cols = ['gender', 'ethnicity_grouped', 'admission_type', 'first_icu_stay', 'icd9_code_lst']
+    str_cols = ['gender', 'ethnicity_grouped', 'admission_type', 'first_icu_stay', 'icd9_code_d_lst', 'icd9_code_p_lst']
     percent_missing_numeric = lambda x: len(np.where(np.isnan(x))[0])/len(x)
     percent_missing_str = lambda x: sum([1 if i == 'nan' else 0 for i in x])/len(x)
     missing_fn_mapper = {'str': percent_missing_str, 'num': percent_missing_numeric}
@@ -426,7 +428,7 @@ def plot_patient_hists(patients):
         col_type = 'num'
         print(c_col)
         c_vals = [patients[x][c_col] for x in range(0, len(patients))]
-        if c_col == 'icd9_code_lst':
+        if c_col in ['icd9_code_d_lst', 'icd9_code_p_lst']:
             c_vals = list(np.concatenate(c_vals).flat)
         if c_col in str_cols:
             col_type = 'str'
@@ -651,7 +653,7 @@ def main(min_count = 50, drop = 0.5, n_folds = 5, model_idx = -1, outfile = 'out
     log("Whole dataset:", logfile=outfile)
 
     log(bags, logfile=outfile)
-    all_codes = [c for c_list in list(side_info['icd9_code_lst'].values()) for c in c_list]
+    all_codes = [c for c_list in list(side_info['icd9_code_p_lst'].values()) + list(side_info['icd9_code_d_lst'].values()) for c in c_list]
     t_codes = pd.value_counts(all_codes)
     n_codes_uniq = len(t_codes)
     n_codes_all = len(all_codes)
@@ -732,7 +734,7 @@ if __name__ == '__main__':
             ('admission_type', CategoricalCondition(embedding_dim=5, sparse=True, embedding_on_gpu=True)),
             ('los_hospital', ContinuousCondition(sparse=True)),
             ('age', ContinuousCondition(sparse=True)),
-            ('seq_num_len', ContinuousCondition(sparse=True)),
+            # ('seq_num_len', ContinuousCondition(sparse=True)),
             ('los_icu_lst_mean', ContinuousCondition(sparse=True)),
             ('heartrate_min_lst_mean', ContinuousCondition(sparse=True)),
             ('heartrate_max_lst_mean', ContinuousCondition(sparse=True)),
@@ -788,108 +790,117 @@ if __name__ == '__main__':
 
         # *** AEs
         (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=None, **ae_params),
-         {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200, 500],
+         {'lr': [0.001],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+          'n_code': [100],
+          'n_epochs': [20],
+          'batch_size': [100],
+          'n_hidden': [200],
           'normalize_inputs': [True]}),
+
+          #ae : {'lr': 0.001, 'n_code': 100, 'n_epochs': 20, 'batch_size': 100, 'n_hidden': 200, 'normalize_inputs': True}
         (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS,
                         **ae_params),
-         {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200, 500],
+         {'lr': [0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+          'n_code': [100],
+          'n_epochs': [20],
+          'batch_size': [100],
+          'n_hidden': [200],
           'normalize_inputs': [True]}),
+          #aec : {'lr': 0.01, 'n_code': 100, 'n_epochs': 20, 'batch_size': 100, 'n_hidden': 200, 'normalize_inputs': True}
         (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS_WITH_TEXT,
                         **ae_params),
-         {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200, 500],
+         {'lr': [0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+          'n_code': [100],
+          'n_epochs': [20],
+          'batch_size': [100],
+          'n_hidden': [200],
           'normalize_inputs': [True]}),
 
         # *** DAEs
         (DAERecommender(conditions=None, **ae_params),
-         {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200, 500],
+         {'lr': [0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+          'n_code': [200],
+          'n_epochs': [20],
+          'batch_size': [100],
+          'n_hidden': [200],
           'normalize_inputs': [True]}),
+          #dae : {'lr': 0.01, 'n_code': 200, 'n_epochs': 20, 'batch_size': 100, 'n_hidden': 200, 'normalize_inputs': True}
         (DAERecommender(conditions=CONDITIONS, **ae_params),
-         {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200, 500],
+         {'lr': [0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+          'n_code': [100],
+          'n_epochs': [20],
+          'batch_size': [100],
+          'n_hidden': [200],
           'normalize_inputs': [True]}),
+          #daec : {'lr': 0.01, 'n_code': 100, 'n_epochs': 20, 'batch_size': 100, 'n_hidden': 200, 'normalize_inputs': True}
         (DAERecommender(conditions=CONDITIONS_WITH_TEXT, **ae_params),
-         {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200, 500],
+         {'lr': [0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+          'n_code': [100],
+          'n_epochs': [20],
+          'batch_size': [100],
+          'n_hidden': [200],
           'normalize_inputs': [True]}),
 
         # *** VAEs
         (VAERecommender(conditions=None, **vae_params),
-         {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200, 500],
+         {'lr': [0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+          'n_code': [100],
+          'n_epochs': [20],
+          'batch_size': [50],
+          'n_hidden': [200],
           'normalize_inputs': [True]
           }),
+          #vae : {'lr': 0.01, 'n_code': 100, 'n_epochs': 20, 'batch_size': 50, 'n_hidden': 200, 'normalize_inputs': True}
         (VAERecommender(conditions=CONDITIONS, **vae_params),
-         {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200, 500],
+         {'lr': [0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+          'n_code': [100],
+          'n_epochs': [20],
+          'batch_size': [50],
+          'n_hidden': [200],
           'normalize_inputs': [True]
           }),
+          #vaec : {'lr': 0.01, 'n_code': 100, 'n_epochs': 20, 'batch_size': 50, 'n_hidden': 200, 'normalize_inputs': True}
         (VAERecommender(conditions=CONDITIONS_WITH_TEXT, **vae_params),
-         {'lr': [0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200, 500],
+         {'lr': [0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+          'n_code': [100],
+          'n_epochs': [20],
+          'batch_size': [50],
+          'n_hidden': [200],
           'normalize_inputs': [True]
           }),
 
         # *** AAEs
         (AAERecommender(adversarial=True, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=None, **ae_params),
          {'prior': ['gauss'],
-          'gen_lr': [0.001, 0.01],
-          'reg_lr': [0.001, 0.01],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200,500],
+          'gen_lr': [0.001],
+          'reg_lr': [ 0.01],
+          'n_code': [200],
+          'n_epochs': [20],
+          'batch_size': [50],
+          'n_hidden': [500],
           'normalize_inputs': [True]},),
+          #aae : {'prior': 'gauss', 'gen_lr': 0.001, 'reg_lr': 0.01, 'n_code': 200, 'n_epochs': 20, 'batch_size': 50, 'n_hidden': 500, 'normalize_inputs': True}
         (
         AAERecommender(adversarial=True, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS, **ae_params),
         {'prior': ['gauss'],
-         'gen_lr': [0.001, 0.01],
-         'reg_lr': [0.001, 0.01],
-         'n_code': [100, 200],
-         'n_epochs': [10, 20],
-         'batch_size': [50, 100],
-         'n_hidden': [200, 500],
+         'gen_lr': [0.001],
+         'reg_lr': [0.01],
+         'n_code': [100],
+         'n_epochs': [20],
+         'batch_size': [50],
+         'n_hidden': [200],
          'normalize_inputs': [True]},),
+         #aaec : {'prior': 'gauss', 'gen_lr': 0.001, 'reg_lr': 0.01, 'n_code': 100, 'n_epochs': 20, 'batch_size': 50, 'n_hidden': 200, 'normalize_inputs': True}
         (AAERecommender(adversarial=True, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS_WITH_TEXT,
                         **ae_params),
          {'prior': ['gauss'],
-          'gen_lr': [0.001, 0.01],
-          'reg_lr': [0.001, 0.01],
-          'n_code': [100, 200],
-          'n_epochs': [10, 20],
-          'batch_size': [50, 100],
-          'n_hidden': [200, 500],
-          'normalize_inputs': [True]},),
+         'gen_lr': [0.001],
+         'reg_lr': [0.01],
+         'n_code': [100],
+         'n_epochs': [20],
+         'batch_size': [50],
+         'n_hidden': [200],
+         'normalize_inputs': [True]},),
     ]
 
     main(outfile=args.outfile, min_count=args.min_count, drop=args.drop, n_folds=args.n_folds, model_idx=args.model_idx, fold_index=args.fold_index)

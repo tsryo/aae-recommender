@@ -114,3 +114,8 @@ results/*
 # PyCharm
 .idea/*
 
+
+*.pkl
+*.whl*
+.vscode
+*-venv

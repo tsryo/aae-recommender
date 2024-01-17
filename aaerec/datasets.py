@@ -385,17 +385,34 @@ class Bags(object):
             print("fold {} ; {} train, {} test documents.".format(c_fold, len(train_data), len(test_data)))
             if self.owner_attributes is not None:
                 metadata_columns = list(self.owner_attributes.keys())
-                train_attributes = {k: {owner: self.owner_attributes[k][owner] for owner in
-                                    train_owners} for k in metadata_columns}
-                test_attributes = {k: {owner: self.owner_attributes[k][owner] for owner in
-                                   test_owners} for k in metadata_columns}
+                train_attributes = {
+                                    k: {
+                                            owner: self.owner_attributes[k][owner] if
+                                            len(self.owner_attributes[k]) > 0 else None
+                                        for owner in train_owners
+                                        }
+                                    for k in metadata_columns
+                                    }
+                only_none_keys_to_remove = [k for k in train_attributes.keys() if sum([ 0 if x1 is None else 1 for x1 in list(train_attributes[k].values())] ) == 0 ]
+                for k in only_none_keys_to_remove:
+                    train_attributes.pop(k, None)
+                test_attributes = {
+                                    k: {
+                                            owner: self.owner_attributes[k][owner] if
+                                            len(self.owner_attributes[k]) > 0 else None
+                                        for owner in test_owners
+                                        }
+                                    for k in metadata_columns
+                                    }
+                only_none_keys_to_remove = [k for k in test_attributes.keys() if sum([ 0 if x1 is None else 1 for x1 in list(test_attributes[k].values())] ) == 0 ]
+                for k in only_none_keys_to_remove:
+                    test_attributes.pop(k, None)
             else:
                 train_attributes = test_attributes = None
             train_set = Bags(train_data, train_owners, owner_attributes=train_attributes)
             test_set = Bags(test_data, test_owners, owner_attributes=test_attributes)
             train_sets.append(train_set)
             test_sets.append(test_set)
-
         return train_sets, test_sets
 
     def create_kfold_train_validate_test(self, n_folds = 1):

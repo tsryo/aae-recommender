@@ -1,6 +1,7 @@
 import linecache
 # from encodings.punycode import selective_find
 
+import json
 import numpy as np
 import torch.nn as nn
 import torch
@@ -143,3 +144,9 @@ def F1(pre, rec):
         return (2.0 * pre * rec) / (pre + rec)
     else:
         return 0.
+
+def load(path):
+    """ Loads a single file """
+    with open(path, 'r') as fhandle:
+        obj = [json.loads(line.rstrip('\n')) for line in fhandle]
+    return obj
