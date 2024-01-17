@@ -232,6 +232,14 @@ class Bags(object):
         attribute_l = []
         for owner in self.bag_owners:
             attribute_l.append(self.owner_attributes[attribute][owner])
+            # if owner in self.owner_attributes[attribute]:
+            #     attribute_l.append(self.owner_attributes[attribute][owner])
+            # else:
+            #     print(f"WARNING missing value {attribute} in hadm_id {owner}")
+            #     new_val = list(self.owner_attributes[attribute].values())[0]
+            #     print(f"Setting to random value {new_val}")
+            #     self.owner_attributes[attribute][owner] = new_val
+            #     attribute_l.append(self.owner_attributes[attribute][owner])
 
         return attribute_l
 
@@ -413,6 +421,7 @@ class Bags(object):
             test_set = Bags(test_data, test_owners, owner_attributes=test_attributes)
             train_sets.append(train_set)
             test_sets.append(test_set)
+
         return train_sets, test_sets
 
     def create_kfold_train_validate_test(self, n_folds = 1):
@@ -514,14 +523,14 @@ class BagsWithVocab(Bags):
         """ Creates a really deep copy """
         # safe cloning of an instance
         # deepcopy is NOT enough
-        n_items = len(self.data) if n_items is None else n_items + start_from
-        data = [[t for t in self.data[b]] for b in range(start_from, n_items)]
+        end_at = len(self.data) if n_items is None else n_items + start_from
+        data = [[t for t in self.data[b]] for b in range(start_from, end_at)]
         vocab = {k: v for k, v in self.vocab.items()}
-        bag_owners = [self.bag_owners[o] for o in range(start_from, n_items)]
+        bag_owners = [self.bag_owners[o] for o in range(start_from, end_at)]
         owner_attributes = None
         if self.owner_attributes is not None:
             owner_attributes = {list(self.owner_attributes.keys())[i]: {list(list(self.owner_attributes.items())[i][1].keys())[j]: list(list(self.owner_attributes.items())[i][1].values())[j]
-                                                                        for j in range(start_from, n_items)}
+                                                                        for j in range(start_from, end_at)}
                                 for i in range(len(self.owner_attributes.items()))}
 
         return BagsWithVocab(data, vocab, owners=bag_owners,

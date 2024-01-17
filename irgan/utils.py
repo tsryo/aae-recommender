@@ -1,10 +1,10 @@
 import linecache
 # from encodings.punycode import selective_find
 
-import json
 import numpy as np
 import torch.nn as nn
 import torch
+import json
 
 
 class L2Loss(nn.Module):
@@ -137,7 +137,6 @@ def ndcg_at_k(r, k, method=1):
 def recall_at_k(r, k, all_pos_num):
     r = np.asfarray(r)[:k]
     return np.sum(r) / all_pos_num
-
 
 def F1(pre, rec):
     if pre + rec > 0:

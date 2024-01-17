@@ -184,7 +184,7 @@ def mean_average_f1(rs, all_pos_nums):
     Returns:
         Mean average f1
     """
-    aps = [average_precision(r) for r in rs]
+    aps = [average_precision(r) for r in rs] # each average precision is the average of the precisions for each code in a patient (row)
     ars = [average_recall(rs[i], all_pos_nums[i]) for i in range(len(all_pos_nums))]
     af1s = np.array([F1(aps[i], ars[i]) for i in range(len(aps))])
     return af1s.mean(), af1s.std()

@@ -69,6 +69,7 @@ def sparse2lists(input):
 def lists2indices(input):
     """
     Extracts typical rows, cols from list of lists
+    @return - tuple with two tuples - inner tuple 1 = row index, inner tuple 2 = column index
     >>> lists = [[1,2], [2,3], [0,1]]
     >>> lists2indices(lists)
     ((0, 0, 1, 1, 2, 2), (1, 2, 2, 3, 0, 1))
@@ -78,9 +79,8 @@ def lists2indices(input):
     >>> lists = [[], []]
     >>> lists2indices(lists)
     ((), ())
-
     """
-    ind = [(r, c) for r, cs in enumerate(input) for c in cs]
+    ind = [(r, c) for r, cs in enumerate(input) for c in cs]    # ind = [(r, c) for r, cs in enumerate(input) for c in range(len(cs))]
     if not ind:
         return ((), ())
     else:
