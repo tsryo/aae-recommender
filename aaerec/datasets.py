@@ -4,7 +4,7 @@ import random
 from builtins import filter # nanu?
 from collections import Counter
 import itertools as it
-
+import copy
 import numpy as np
 import pandas as pd
 
@@ -184,13 +184,13 @@ class Bags(object):
             @param start_from - (Optional) specify from which item to start cloning (default is 0)
             @param n_items - (Optional) specify how many items to clone from original object (default is all)
         """
-        n_items = len(self.data) if n_items is None else n_items + start_from
-        data = [[t for t in self.data[b]] for b in range(start_from, n_items)]
-        bag_owners = [self.bag_owners[o] for o in range(start_from, n_items)]
-        if self.owner_attributes is not None:
-            owner_attributes = {list(self.owner_attributes.keys())[i]: {list(list(self.owner_attributes.items())[i][1].keys())[j]: list(list(self.owner_attributes.items())[i][1].values())[j]
-                                                                        for j in range(start_from, n_items)}
-                                for i in range(len(self.owner_attributes.items()))}
+        total_items = len(self.data) if n_items is None else n_items + start_from
+        data = [[item for item in self.data[batch]] for batch in range(start_from, total_items)]
+        bag_owners = [self.bag_owners[owner] for owner in range(start_from, total_items)]
+        owner_attributes = {
+            key: {inner_key: inner_value for inner_key, inner_value in list(value.items())[start_from:total_items]}
+            for key, value in list(self.owner_attributes.items())
+        }
 
         return Bags(data, bag_owners, owner_attributes=owner_attributes)
 
@@ -523,15 +523,14 @@ class BagsWithVocab(Bags):
         """ Creates a really deep copy """
         # safe cloning of an instance
         # deepcopy is NOT enough
-        end_at = len(self.data) if n_items is None else n_items + start_from
-        data = [[t for t in self.data[b]] for b in range(start_from, end_at)]
+        total_items = len(self.data) if n_items is None else n_items + start_from
+        data = [[item for item in self.data[batch]] for batch in range(start_from, total_items)]
+        bag_owners = [self.bag_owners[owner] for owner in range(start_from, total_items)]
         vocab = {k: v for k, v in self.vocab.items()}
-        bag_owners = [self.bag_owners[o] for o in range(start_from, end_at)]
-        owner_attributes = None
-        if self.owner_attributes is not None:
-            owner_attributes = {list(self.owner_attributes.keys())[i]: {list(list(self.owner_attributes.items())[i][1].keys())[j]: list(list(self.owner_attributes.items())[i][1].values())[j]
-                                                                        for j in range(start_from, end_at)}
-                                for i in range(len(self.owner_attributes.items()))}
+        owner_attributes = {
+            key: {inner_key: inner_value for inner_key, inner_value in list(value.items())[start_from:total_items]}
+            for key, value in list(self.owner_attributes.items())
+        }
 
         return BagsWithVocab(data, vocab, owners=bag_owners,
                              attributes=owner_attributes)
