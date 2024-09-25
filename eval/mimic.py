@@ -227,45 +227,99 @@ CONDITIONS = ConditionList([
 CONDITIONS_WITH_TEXT = None
 
 # init dict with text descriptions of each ICD9 code
-icd_code_defs = pd.read_csv(ICD_CODE_DEFS_PATH, sep='\t')
-d_icd_code_defs = {}
-dup_keys = []
-for ii in range(len(icd_code_defs)):
-    c_code_row = icd_code_defs.iloc[ii]
+#icd_code_defs = pd.read_csv(ICD_CODE_DEFS_PATH, sep='\t')
+#d_icd_code_defs = {}
+#dup_keys = []
+#for ii in range(len(icd_code_defs)):
+#    c_code_row = icd_code_defs.iloc[ii]
     # 'type', 'icd9_code', 'short_title', 'long_title'
-    icd9_code = c_code_row.icd9_code
-    icd9_code = 'p_' + icd9_code if c_code_row.type == 'PROCEDURE' else 'd_' + icd9_code
-    if icd9_code in d_icd_code_defs.keys():
-        print("{} already in dict! prepending 0 to new key entry to prevent override".format(icd9_code))
-        dup_keys.append(icd9_code)
-        icd9_code = icd9_code[0:2] + '0' + icd9_code[2:]
-    d_icd_code_defs[icd9_code] = c_code_row.long_title
+#    icd9_code = c_code_row.icd9_code
+#    icd9_code = 'p_' + icd9_code if c_code_row.type == 'PROCEDURE' else 'd_' + icd9_code
+#    if icd9_code in d_icd_code_defs.keys():
+#        print("{} already in dict! prepending 0 to new key entry to prevent override".format(icd9_code))
+#        dup_keys.append(icd9_code)
+#        icd9_code = icd9_code[0:2] + '0' + icd9_code[2:]
+#    d_icd_code_defs[icd9_code] = c_code_row.long_title
 
+PRESCRIPTIONS_CSV_PATH = "/home/ethimaj/data/tseko_storage_hpc_mimic_autoencoders/dev/emily/aae-recommender/eval/PRESCRIPTIONS.csv"
+#FULL_PATIENTS_JSON_PATH = "../../data/MIMIC/medication/patients_debug_5k.json"
+FULL_PATIENTS_JSON_PATH = "../../data/MIMIC/medication/patients_full.json"
+
+def load_ndc_names(ndc_list_defs_path):
+    prescriptions_data = pd.read_csv(ndc_list_defs_path)
+    ndc_names = {}
+
+    for ii in range(len(prescriptions_data)):
+        c_code_row = prescriptions_data.iloc[ii]
+        ndc_code = str(c_code_row['ndc']).strip()  # Ensure NDC code is a string and strip whitespace
+        drug_name = c_code_row['drug'].strip()     # Strip whitespace from drug name
+
+        if not ndc_code or not drug_name:
+            continue  # Skip if NDC code or drug name is empty
+
+        # Handle duplicate NDC codes
+        if ndc_code in ndc_names.keys():
+            print(f"{ndc_code} already in dict! Prepending 0 to new key entry to prevent override")
+            while ndc_code in ndc_names.keys():
+                ndc_code = '0' + ndc_code
+
+        ndc_names[ndc_code] = drug_name
+
+    print(f"Loaded {len(ndc_names)} NDC to drug name mappings.")
+    return pd.DataFrame(list(ndc_names.items()), columns=['ndc', 'drug'])
+
+ndc_code_defs = load_ndc_names(PRESCRIPTIONS_CSV_PATH)
+    
 # Models without/with metadata (empty init here, gets populated later in source)
 MODELS_WITH_HYPERPARAMS = []
 
 def normalize_conditional_data_bags(bags):
     for k in list(bags.owner_attributes.keys()):
-        if k in ['ICD9_defs_txt', 'gender', 'ethnicity_grouped', 'admission_type', 'icd9_code_d_lst', 'icd9_code_p_lst']:
+        if k in ['ICD9_defs_txt', 'gender', 'ethnicity_grouped', 'admission_type', 'icd9_code_d_lst', 'icd9_code_p_lst', 'ndc_list']:
             continue
         c_vals = list(bags.owner_attributes[k].values())
-        c_vals = np.nan_to_num(np.array(c_vals))
+        
+        # Handle empty strings and non-numeric values
+        c_vals = [0 if v == '' else v for v in c_vals]
+        try:
+            c_vals = np.nan_to_num(np.array(c_vals, dtype=np.float64))  # Ensure conversion to float
+        except ValueError as e:
+            print(f"Error converting attribute '{k}' values to float: {e}")
+            print(f"Offending values: {c_vals}")
+            continue  # Skip this attribute if conversion fails
+        
         c_vals = preprocessing.normalize([c_vals])[0].tolist()
         c_keys = list(bags.owner_attributes[k].keys())
-        bags.owner_attributes[k] = {c_keys[i]:c_vals[i] for i in range(len(c_keys))}
+        bags.owner_attributes[k] = {c_keys[i]: c_vals[i] for i in range(len(c_keys))}
     return bags
-def prepare_evaluation_kfold_cv(bags, n_folds=5, n_items=None, min_count=None, drop=1):
+
+
+def prepare_evaluation_kfold_cv(bags, n_folds=5, n_items=None, min_count=None, drop=1, d_ndc_code_defs=None):
     """
     Split data into train and dev set.
     Build vocab on train set and applies it to both train and test set.
     """
+    if d_ndc_code_defs is None:
+        raise ValueError("d_ndc_code_defs is None in prepare_evaluation_kfold_cv")
+    
+    split_results = bags.create_kfold_train_validate_test(n_folds=n_folds)
+    
+    if len(split_results) == 4:
+        train_sets, val_sets, test_sets, y_tests = split_results
+    elif len(split_results) == 3:
+        train_sets, val_sets, test_sets = split_results
+        y_tests = None
+    else:
+        raise ValueError("Unexpected number of return values from create_kfold_train_validate_test")
+    
     # Split 10% validation data.
-    train_sets, val_sets, test_sets = bags.create_kfold_train_validate_test(n_folds=n_folds)
     for i in range(n_folds):
         train_sets[i] = normalize_conditional_data_bags(train_sets[i])
         test_sets[i] = normalize_conditional_data_bags(test_sets[i])
         val_sets[i] = normalize_conditional_data_bags(val_sets[i])
+        
     missings = []
+
     # Builds vocabulary only on training set
     for i in range(n_folds):
         train_set = train_sets[i]
@@ -295,8 +349,8 @@ def prepare_evaluation_kfold_cv(bags, n_folds=5, n_items=None, min_count=None, d
         test_set.data = noisy
         train_sets[i] = train_set
 
-        test_set = adjust_icd_text_defs_post_corrupt(test_set)
-        val_set = adjust_icd_text_defs_post_corrupt(val_set)
+        test_set = adjust_ndc_text_defs_post_corrupt(test_set, d_ndc_code_defs)
+        val_set = adjust_ndc_text_defs_post_corrupt(val_set, d_ndc_code_defs)
 
         test_sets[i] = test_set
         val_sets[i] = val_set
@@ -304,15 +358,32 @@ def prepare_evaluation_kfold_cv(bags, n_folds=5, n_items=None, min_count=None, d
         missings.append(missing)
 
     return train_sets, val_sets, test_sets, missings
-def adjust_icd_text_defs_post_corrupt(corrupted_set):
+
+
+#def adjust_icd_text_defs_post_corrupt(corrupted_set):
+#    for j in range(0, len(corrupted_set.bag_owners)):
+#        c_hadm_id = corrupted_set.bag_owners[j]
+#        get_icd_code_from_index = lambda x, y: [y.index2token[c_x] for c_x in x]
+#        c_icd_codes = get_icd_code_from_index(corrupted_set.data[j], corrupted_set)
+#        c_code_defs = [re.sub(r'[^\w\s]', '', d_icd_code_defs[x].lower()) if x in d_icd_code_defs.keys() else '' for
+#                       x in c_icd_codes]
+        # corrupted_set.owner_attributes['ICD9_defs_txt'][c_hadm_id] = (' '.join(c_code_defs))
+#    return corrupted_set
+
+# d_ndc_code_defs -> stands for the list of ndc duplicates
+
+def adjust_ndc_text_defs_post_corrupt(corrupted_set, d_ndc_code_defs):
+    if d_ndc_code_defs is None:
+        raise ValueError("d_ndc_code_defs is None in adjust_ndc_text_defs_post_corrupt")
+
     for j in range(0, len(corrupted_set.bag_owners)):
         c_hadm_id = corrupted_set.bag_owners[j]
-        get_icd_code_from_index = lambda x, y: [y.index2token[c_x] for c_x in x]
-        c_icd_codes = get_icd_code_from_index(corrupted_set.data[j], corrupted_set)
-        c_code_defs = [re.sub(r'[^\w\s]', '', d_icd_code_defs[x].lower()) if x in d_icd_code_defs.keys() else '' for
-                       x in c_icd_codes]
-        # corrupted_set.owner_attributes['ICD9_defs_txt'][c_hadm_id] = (' '.join(c_code_defs))
+        get_ndc_list_from_index = lambda x, y: [y.index2token[c_x] for c_x in x]
+        c_ndc_list = get_ndc_list_from_index(corrupted_set.data[j], corrupted_set)
+        c_list_defs = [re.sub(r'[^\w\s]', '', d_ndc_code_defs.get(x, '').lower()) for x in c_ndc_list]
+        corrupted_set.owner_attributes['NDC_defs_txt'][c_hadm_id] = ' '.join(c_list_defs)
     return corrupted_set
+
 
 def log(*print_args, logfile=None):
     """ Maybe logs the output also in the file `outfile` """
@@ -320,8 +391,8 @@ def log(*print_args, logfile=None):
         with open(logfile, 'a') as fhandle:
             print(*print_args, file=fhandle)
     print(*print_args)
-
-def unpack_patients(patients, icd_code_defs = None):
+        
+def unpack_patients(patients, ndc_code_defs):
     """
     Unpacks list of patients in a way that is compatible with our Bags dataset
     format. It is not mandatory that patients are sorted.
@@ -344,42 +415,74 @@ def unpack_patients(patients, icd_code_defs = None):
                         'los_icu_lst_min': {}, 'heartrate_min_lst_min': {}, 'heartrate_max_lst_min': {}, 'heartrate_mean_lst_min': {}, 'sysbp_min_lst_min': {}, 'sysbp_max_lst_min': {}, 'sysbp_mean_lst_min': {}, 'diasbp_min_lst_min': {}, 'diasbp_max_lst_min': {}, 'diasbp_mean_lst_min': {}, 'meanbp_min_lst_min': {}, 'meanbp_max_lst_min': {}, 'meanbp_mean_lst_min': {}, 'resprate_min_lst_min': {}, 'resprate_max_lst_min': {}, 'resprate_mean_lst_min': {}, 'tempc_min_lst_min': {}, 'tempc_max_lst_min': {}, 'tempc_mean_lst_min': {}, 'spo2_min_lst_min': {}, 'spo2_max_lst_min': {}, 'spo2_mean_lst_min': {}, 'glucose_min_lst_min': {}, 'glucose_max_lst_min': {}, 'glucose_mean_lst_min': {},
                         'los_icu_lst_max': {}, 'heartrate_min_lst_max': {}, 'heartrate_max_lst_max': {}, 'heartrate_mean_lst_max': {}, 'sysbp_min_lst_max': {}, 'sysbp_max_lst_max': {}, 'sysbp_mean_lst_max': {}, 'diasbp_min_lst_max': {}, 'diasbp_max_lst_max': {}, 'diasbp_mean_lst_max': {}, 'meanbp_min_lst_max': {}, 'meanbp_max_lst_max': {}, 'meanbp_mean_lst_max': {}, 'resprate_min_lst_max': {}, 'resprate_max_lst_max': {}, 'resprate_mean_lst_max': {}, 'tempc_min_lst_max': {}, 'tempc_max_lst_max': {}, 'tempc_mean_lst_max': {}, 'spo2_min_lst_max': {}, 'spo2_max_lst_max': {}, 'spo2_mean_lst_max': {}, 'glucose_min_lst_max': {}, 'glucose_max_lst_max': {}, 'glucose_mean_lst_max': {},
                         'heartrate_min_lst_mm': {}, 'heartrate_max_lst_mm': {}, 'heartrate_mean_lst_mm': {}, 'sysbp_min_lst_mm': {}, 'sysbp_max_lst_mm': {}, 'sysbp_mean_lst_mm': {}, 'diasbp_min_lst_mm': {}, 'diasbp_max_lst_mm': {}, 'diasbp_mean_lst_mm': {}, 'meanbp_min_lst_mm': {}, 'meanbp_max_lst_mm': {}, 'meanbp_mean_lst_mm': {}, 'resprate_min_lst_mm': {}, 'resprate_max_lst_mm': {}, 'resprate_mean_lst_mm': {}, 'tempc_min_lst_mm': {}, 'tempc_max_lst_mm': {}, 'tempc_mean_lst_mm': {}, 'spo2_min_lst_mm': {}, 'spo2_max_lst_mm': {}, 'spo2_mean_lst_mm': {}, 'glucose_min_lst_mm': {}, 'glucose_max_lst_mm': {}, 'glucose_mean_lst_mm': {}
-                        }
-    d_icd_code_defs = {}
+                        , 'ndc_list': {}, 'NDC_defs_txt': {}}
+   # d_icd_code_defs = {}
+    # emily todo ensure ndc_code_defs is a dataframe
+   # if not isinstance(ndc_code_defs, pd.DataFrame):
+   #     raise ValueError("ndc_code_defs should be a DataFrame")
+    
+    d_ndc_code_defs = {}
     dup_keys = []
-    for i in range(len(icd_code_defs)):
-        c_code_row = icd_code_defs.iloc[i]
+    # Process ICD9 code definitions   
+#    for i in range(len(icd_code_defs)):
+#        c_code_row = icd_code_defs.iloc[i]
+#        # 'type', 'icd9_code', 'short_title', 'long_title'
+#        icd9_code = c_code_row.icd9_code
+#        icd9_code = 'p_' + icd9_code if c_code_row.type == 'PROCEDURE' else 'd_' + icd9_code
+#        if icd9_code in d_icd_code_defs.keys():
+#            print("{} already in dict! prepending 0 to new key entry to prevent override".format(icd9_code))
+#            dup_keys.append(icd9_code)
+#            icd9_code = icd9_code[0:2] + '0' + icd9_code[2:]
+#        d_icd_code_defs[icd9_code] = c_code_row.long_title
+        
+    # Process NDC code definitions    
+    for i in range(len(ndc_code_defs)):
+        c_code_row = ndc_code_defs.iloc[i]
         # 'type', 'icd9_code', 'short_title', 'long_title'
-        icd9_code = c_code_row.icd9_code
-        icd9_code = 'p_' + icd9_code if c_code_row.type == 'PROCEDURE' else 'd_' + icd9_code
-        if icd9_code in d_icd_code_defs.keys():
-            print("{} already in dict! prepending 0 to new key entry to prevent override".format(icd9_code))
-            dup_keys.append(icd9_code)
-            icd9_code = icd9_code[0:2] + '0' + icd9_code[2:]
-        d_icd_code_defs[icd9_code] = c_code_row.long_title
+        ndc_code = str(c_code_row['ndc'])   #'ndc code' is a string
+        drug_name = c_code_row['drug']
+        
+        # Prefixing logic, if possible, based on 'type'
+        ndc_list = 'p_' + ndc_code if c_code_row.get('type') == 'PRESCRIPTION' else 'd_' + ndc_code
+        
+        if ndc_list in d_ndc_code_defs.keys():
+            print("{} already in dict! prepending 0 to new key entry to prevent override".format(ndc_list))
+            dup_keys.append(ndc_list)
+            while ndc_list in d_ndc_code_defs.keys():
+                ndc_list = ndc_list[:2] + '0' + ndc_list[2:]
+        
+        d_ndc_code_defs[ndc_list] = f"{drug_name}"                    
 
 
     for patient in patients:
-        # Extract ids
+        # Extract 'ids'
         ids.append(patient["hadm_id"])
-        # Put all subjects assigned to the patient in here
         try:
             # Subject may be missing
-            bags_of_codes.append(patient["icd9_code_d_lst"] + patient["icd9_code_p_lst"])
+            #bags_of_codes.append(patient["ndc_list"])
+            bags_of_codes.append(patient.get("ndc_list", []))
         except KeyError:
             bags_of_codes.append([])
-        #  features that can be easily used: age, gender, ethnicity, adm_type, icu_stay_seq, hosp_stay_seq
+
+        # Features that can be easily used: age, gender, ethnicity, adm_type, icu_stay_seq, hosp_stay_seq
         # Use dict here such that we can also deal with unsorted ids
         c_hadm_id = patient["hadm_id"]
         for c_var in other_attributes.keys():
-            if c_var == "ICD9_defs_txt" or c_var not in patient.keys():
+            if c_var == "NDC_defs_txt" or c_var not in patient.keys():
                 continue
             other_attributes[c_var][c_hadm_id] = patient[c_var]
         # c_icd_codes = other_attributes['icd9_code_lst'][c_hadm_id]
         # c_code_defs = [re.sub(r'[^\w\s]', '', d_icd_code_defs[x].lower()) if x in d_icd_code_defs.keys() else '' for x in c_icd_codes]
         # other_attributes['ICD9_defs_txt'][c_hadm_id] = (' '.join(c_code_defs))
+
+# Populate NDC_defs_txt:
+        if 'ndc_list' in patient.keys():
+            ndc_list = patient['ndc_list']
+            c_code_defs = [d_ndc_code_defs.get(ndc, '') for ndc in ndc_list]   
+            other_attributes['NDC_defs_txt'][c_hadm_id] = ''.join(c_code_defs) 
+    
     # bag_of_codes and ids should have corresponding indices
-    return bags_of_codes, ids, other_attributes, d_icd_code_defs
+    return bags_of_codes, ids, other_attributes, d_ndc_code_defs
 
 
 def plot_patient_hists(patients):
@@ -478,41 +581,46 @@ def eval_different_drop_values(drop_vals, bags, min_count, n_folds, outfile):
             plt.plot(x, y, marker="o", markersize=3, markeredgecolor="red", markerfacecolor="green")
             plt.xlabel('drop percentage')
             plt.ylabel(c_metric)
-            plt.title("Perofmrnace change in {} metric for {} model wrt drop percentage".format(c_metric, c_model))
+            plt.title("Performance change in {} metric for {} model wrt drop percentage".format(c_metric, c_model))
             plt.savefig('../plots/drop-percentages/plot_{}_{}.png'.format(c_model, c_metric), bbox_inches='tight')
             plt.show()
 
 
-def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_to_try, split_sets_filename = None, fold_index=-1):
+def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_to_try, split_sets_filename=None, fold_index=-1, d_ndc_code_defs=None):
     metrics_per_drop_per_model = []
     train_sets, val_sets, test_sets, y_tests = None, None, None, None
-    # first try to load split datasets from file
+
     if split_sets_filename is not None and os.path.exists(split_sets_filename):
-        with (open(split_sets_filename, "rb")) as openfile:
+        with open(split_sets_filename, "rb") as openfile:
             train_sets, val_sets, test_sets, y_tests = pickle.load(openfile)
     else:
-        train_sets, val_sets, test_sets, y_tests = prepare_evaluation_kfold_cv(bags, min_count=min_count, drop=drop,
-                                                                               n_folds=n_folds)
-    # create split datasets file if one was not there already
+        result = prepare_evaluation_kfold_cv(bags, min_count=min_count, drop=drop, n_folds=n_folds, d_ndc_code_defs=d_ndc_code_defs)
+        if len(result) == 4:
+            train_sets, val_sets, test_sets, y_tests = result
+        elif len(result) == 3:
+            train_sets, val_sets, test_sets = result
+            y_tests = None
+        else:
+            raise ValueError("Unexpected number of return values from evaluation_kfold_cv")
+    
     if split_sets_filename is not None and not os.path.exists(split_sets_filename):
         save_object((train_sets, val_sets, test_sets, y_tests), split_sets_filename)
 
     del bags
     best_params = None
     for c_fold in range(n_folds):
-        # init
-        if c_fold != 0: # load from file trian/test/val sets and then delete them
-            with (open(split_sets_filename, "rb")) as openfile:
+        if c_fold != 0:
+            with open(split_sets_filename, "rb") as openfile:
                 train_sets, val_sets, test_sets, y_tests = pickle.load(openfile)
-        # if specified to run specific fold index, skip others
         if fold_index >= 0 and c_fold != fold_index:
             continue
+        print(f"Starting fold {c_fold}")
         log("FOLD = {}".format(c_fold), logfile=outfile)
         log("TIME: {}".format(datetime.now().strftime("%Y-%m-%d-%H:%M")), logfile=outfile)
         train_set = train_sets[c_fold]
         val_set = val_sets[c_fold]
         test_set = test_sets[c_fold]
-        y_test = y_tests[c_fold]
+        y_test = y_tests[c_fold] if y_tests else None
         log("Train set:", logfile=outfile)
         log(train_set, logfile=outfile)
 
@@ -522,17 +630,13 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_
         log("Test set:", logfile=outfile)
         log(test_set, logfile=outfile)
 
-        # reduce memory consumption
         del train_sets
         del val_sets
         del test_sets
 
-        # THE GOLD (put into sparse matrix)
-        y_test = lists2sparse(y_test, test_set.size(1)).tocsr(copy=False)
-        # the known items in the test set, just to not recompute
+        y_test = lists2sparse(y_test, test_set.size(1)).tocsr(copy=False) if y_test is not None else None
         x_test = lists2sparse(test_set.data, test_set.size(1)).tocsr(copy=False)
 
-        # use model copy to reset model state on each fold
         model_cpy = None
         if model_cpy is None and not hasattr(model, 'reset_parameters'):
             model_cpy = copy.deepcopy(model)
@@ -540,66 +644,67 @@ def run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_
         log(model, logfile=outfile)
         log("training model \n TIME: {}  ".format(datetime.now().strftime("%Y-%m-%d-%H:%M")), logfile=outfile)
 
-        # Optimize hyperparams
-        # when we specify a fold, we assume the hyperparam tunning was already done
-        if fold_index >= 0 or ('batch_size' in hyperparams_to_try.keys() and
-                               type(hyperparams_to_try['batch_size']) == int):
+        if fold_index >= 0 or ('batch_size' in hyperparams_to_try.keys() and type(hyperparams_to_try['batch_size']) == int):
             model.model_params = hyperparams_to_try
-        # for time constraints, just run hyperparams once
         elif hyperparams_to_try is not None and c_fold == 0:
             log('Optimizing on following hyper params: ', logfile=outfile)
             log(hyperparams_to_try, logfile=outfile)
             tunning_train_set = train_set.clone()
-            best_params, _, _ = hyperparam_optimize(model, tunning_train_set, val_set.clone(),
-                                                    tunning_params=hyperparams_to_try, drop=drop)
-            log('After hyperparam_optimize, best params: ', logfile=outfile)
+            best_params, _, _ = hyperparam_optimize(model, tunning_train_set, val_set.clone(), tunning_params=hyperparams_to_try, drop=drop)
+            log('After hyperparam_optimize best params: ', logfile=outfile)
             log(best_params, logfile=outfile)
             model.model_params = best_params
 
-        # Reset model state
         if hasattr(model, 'reset_parameters'):
             model.reset_parameters()
         else:
             log("Calling deepcopy for model", logfile=outfile)
             model = copy.deepcopy(model_cpy)
-            # del model_cpy
         gc.collect()
 
-        # Training
-        model.train(train_set)
+        try:
+            print(f"Training model for fold {c_fold}")
+            model.train(train_set)
+            print(f"Model training completed for fold {c_fold}")
 
-        # Prediction
-        y_pred = model.predict(test_set)
-        log(" TRAIN AND PREDICT COMPLETE \n TIME: {}".format(datetime.now().strftime("%Y-%m-%d-%H:%M")), logfile=outfile)
-        # Sanity-fix #1, make sparse stuff dense, expect array
-        if sp.issparse(y_pred):
-            y_pred = y_pred.toarray()
-        else:
-            y_pred = np.asarray(y_pred)
-        # Sanity-fix, remove predictions for already present items
-        y_pred = remove_non_missing(y_pred, x_test, copy=False)
+            # Prediction
+            y_pred = model.predict(test_set)
+            print(f"Prediction completed for fold {c_fold}")
+            log(" TRAIN AND PREDICT COMPLETE \n TIME: {}".format(datetime.now().strftime("%Y-%m-%d-%H:%M")), logfile=outfile)
+            # Sanity-fix #1 make sparse stuff dense expect array
+            if sp.issparse(y_pred):
+                y_pred = y_pred.toarray()
+            else:
+                y_pred = np.asarray(y_pred)
+            # Sanity-fix remove predictions for already present items
+            y_pred = remove_non_missing(y_pred, x_test, copy=False)
 
-        # save model test predictions + actual test values + test inputs [may be useful to look at later]
-        save_payload = {"test_set": test_set, "x_test": x_test, "y_pred" : y_pred}
-        save_object(save_payload, '{}_{}_res.pkl'.format(str(model)[0:64], c_fold))
+            # save model test predictions + actual test values + test inputs [may be useful to look at later]
+            save_payload = {"test_set": test_set, "x_test": x_test, "y_pred": y_pred}
+            save_object(save_payload, '{}_{}_res.pkl'.format(str(model)[0:64], c_fold))
 
-        # reduce memory usage
-        del test_set
-        del train_set
-        del val_set
+            # reduce memory usage
+            del test_set
+            del train_set
+            del val_set
 
-        # Evaluate metrics
-        results = evaluate(y_test, y_pred, METRICS)
-        log("-" * 78, logfile=outfile)
-        for metric, stats in zip(METRICS, results):
-            log("* FOLD#{} {}: {} ({})".format(c_fold, metric, *stats), logfile=outfile)
-            metrics_per_drop_per_model.append([c_fold, drop, str(model), metric, stats[0], stats[1]])
-        log('=' * 78, logfile=outfile)
+            # Evaluate metrics
+            if y_test is not None and y_test.size > 0:
+                results = evaluate(y_test, y_pred, METRICS)
+                log("-" * 78, logfile=outfile)
+                for metric, stats in zip(METRICS, results):
+                    log("* FOLD#{} {}: {} ({})".format(c_fold, metric, *stats), logfile=outfile)
+                    metrics_per_drop_per_model.append([c_fold, drop, str(model), metric, stats[0], stats[1]])
+                log('=' * 78, logfile=outfile)
+
+        except Exception as e:
+            print(f"Error during training or evaluation for fold {c_fold}: {e}")
 
     # Return result metrics
     metrics_df = pd.DataFrame(metrics_per_drop_per_model,
                               columns=['fold', 'drop', 'model', 'metric', 'metric_val', 'metric_std'])
     return metrics_df
+
 
 def save_object(obj, filename):
     with open(filename, 'wb') as outp:  # Overwrites any existing file.
@@ -607,32 +712,68 @@ def save_object(obj, filename):
 
 # @param fold_index - run a specific fold of CV (-1 = run all folds)
 # see lines at parser.add_argument for param details
-def main(min_count = 50, drop = 0.5, n_folds = 5, model_idx = -1, outfile = 'out.log', fold_index = -1):
+def main(min_count=50, drop=0.5, n_folds=5, model_idx=-1, outfile='out.log', fold_index=-1):
     """ Main function for training and evaluating AAE methods on MIMIC data """
+    print("Initializing models...")
+    sets_to_try = MODELS_WITH_HYPERPARAMS if model_idx < 0 else [MODELS_WITH_HYPERPARAMS[model_idx]]
+    print("Models initialized: ", sets_to_try)
+    
     print('drop = {}; min_count = {}, n_folds = {}, model_idx = {}'.format(drop, min_count, n_folds, model_idx))
-    print("Loading data from", DATA_PATH)
-    patients = load(DATA_PATH)
+    
+    try:
+        print("Loading data from", DATA_PATH)
+        patients = load(DATA_PATH)
+        print("Data loaded successfully.")
+    except Exception as e:
+        print(f"Error loading data: {e}")
+        return
+    
     print("Unpacking MIMIC data...")
-    bags_of_patients, ids, side_info, d_icd_code_defs = unpack_patients(patients, icd_code_defs)  # with conditions
-    assert(len(set(ids)) == len(ids))
-    del patients
-    bags = Bags(bags_of_patients, ids, side_info)  # with conditions
+    try:
+        ndc_code_defs = pd.read_csv(PRESCRIPTIONS_CSV_PATH)
+        print("NDC code definitions loaded successfully.")
+    except Exception as e:
+        print(f"Error loading NDC code definitions: {e}")
+        return
+    
+    try:
+        bags_of_patients, ids, side_info, d_ndc_code_defs = unpack_patients(patients, ndc_code_defs)
+        assert len(set(ids)) == len(ids)
+        del patients
+        bags = Bags(bags_of_patients, ids, side_info)
+        print("MIMIC data unpacked successfully.")
+    except Exception as e:
+        print(f"Error unpacking patients: {e}")
+        return
+    
+    if d_ndc_code_defs is None:
+        print("d_ndc_code_defs is None after unpack_patients")
+    else:
+        print("d_ndc_code_defs is not None")
+        print(f"d_ndc_code_defs has {len(d_ndc_code_defs)} entries")
+        sample_entries = list(d_ndc_code_defs.items())[:5]
+        for key, value in sample_entries:
+            print(f"Key: {key}, Value: {value}")
+            
     log("Whole dataset:", logfile=outfile)
-
     log(bags, logfile=outfile)
-    all_codes = [c for c_list in list(side_info['icd9_code_p_lst'].values()) + list(side_info['icd9_code_d_lst'].values()) for c in c_list]
+    
+    all_codes = [code for c_list in list(side_info['ndc_list'].values()) for code in c_list]
+
+    if not all_codes:
+        print("No NDC codes found.")
+        return
+    
     t_codes = pd.value_counts(all_codes)
     n_codes_uniq = len(t_codes)
     n_codes_all = len(all_codes)
     code_counts = pd.value_counts(all_codes)
-    # all_unique_codes = set(all_codes)
-    # all_unique_code_defs = set([cd for cd_list in list(side_info['ICD9_defs_txt'].values()) for cd in cd_list])
 
     log("Total number of codes in current dataset = {}".format(n_codes_all), logfile=outfile)
     log("Total number of unique codes in current dataset = {}".format(n_codes_uniq), logfile=outfile)
 
-    code_percentages = list(zip(code_counts,code_counts.index))
-    code_percentages = [ (val/n_codes_all, code) for val,code in code_percentages ]
+    code_percentages = list(zip(code_counts, code_counts.index))
+    code_percentages = [(val / n_codes_all, code) for val, code in code_percentages]
     code_percentages_accum = code_percentages
     for i in range(len(code_percentages)):
         if i > 0:
@@ -643,26 +784,27 @@ def main(min_count = 50, drop = 0.5, n_folds = 5, model_idx = -1, outfile = 'out
     for i in range(len(code_percentages_accum)):
         c_code = code_percentages_accum[i][1]
         c_percentage = code_percentages_accum[i][0]
-        c_def = d_icd_code_defs[c_code] if c_code in d_icd_code_defs.keys() else ''
+        c_def = d_ndc_code_defs.get(f"d_{c_code}", '') 
         log("{}\t#{}\tcode: {}\t( desc: {})".format(c_percentage, i+1, c_code, c_def), logfile=outfile)
         if c_percentage >= 0.5:
             log("first {} codes account for 50% of all code occurrences".format(i), logfile=outfile)
             log("Remaining {} codes account for remaining 50% of all code occurrences".format(n_codes_uniq-i), logfile=outfile)
-            log( "Last 1000 codes account for only {}% of data".format((1-code_percentages_accum[n_codes_uniq-1000][0])*100), logfile=outfile)
+            log("Last 1000 codes account for only {}% of data".format((1-code_percentages_accum[n_codes_uniq-1000][0])*100), logfile=outfile)
             break
 
-
-    log("drop = {}, min_count = {}".format(drop, min_count), logfile=outfile)
-    sets_to_try = MODELS_WITH_HYPERPARAMS if model_idx < 0 else [MODELS_WITH_HYPERPARAMS[model_idx]]
-    models_to_del = [i for i in range(len(MODELS_WITH_HYPERPARAMS)) if i != model_idx]
-    for i in list(reversed(models_to_del)):
-        del MODELS_WITH_HYPERPARAMS[i]
+    log("drop = {} min_count = {}".format(drop, min_count), logfile=outfile)
 
     for model, hyperparams_to_try in sets_to_try:
-        metrics_df = run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_to_try, split_sets_filename="splitsets.pkl", fold_index=fold_index)
-        metrics_df.to_csv('./{}_{}_{}.csv'.format(outfile, str(model)[0:48], fold_index), sep = '\t')
+        print(f"Running CV pipeline for model: {model}")
+        try:
+            metrics_df = run_cv_pipeline(bags, drop, min_count, n_folds, outfile, model, hyperparams_to_try, split_sets_filename="splitsets100.pkl", fold_index=fold_index, d_ndc_code_defs=d_ndc_code_defs)
+            print(f"Pipeline run completed for model: {model}")
+            metrics_df.to_csv('./{}_{}_{}.csv'.format(outfile, str(model)[0:48], fold_index), sep='\t')
+            print(f"Metrics saved for model: {model}")
+        except Exception as e:
+            print(f"Error running CV pipeline for model {model}: {e}")
 
-
+# Command-Line interface, for running different configurations
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('-o', '--outfile',
@@ -696,6 +838,7 @@ if __name__ == '__main__':
         VECTORS = KeyedVectors.load_word2vec_format(W2V_PATH, binary=W2V_IS_BINARY)
         CONDITIONS_WITH_TEXT = ConditionList([
             ('ICD9_defs_txt', PretrainedWordEmbeddingCondition(VECTORS)),
+            ('NDC_defs_txt', PretrainedWordEmbeddingCondition(VECTORS)),     
             ('gender', CategoricalCondition(embedding_dim=3, sparse=True, embedding_on_gpu=True)),
             ('ethnicity_grouped', CategoricalCondition(embedding_dim=7, sparse=True, embedding_on_gpu=True)),
             ('admission_type', CategoricalCondition(embedding_dim=5, sparse=True, embedding_on_gpu=True)),
@@ -874,117 +1017,117 @@ if __name__ == '__main__':
 
         # *** AEs
         (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=None, **ae_params),
-         {'lr': [0.001],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100],
+         {'lr': [0.0001 ,0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+          'n_code': [100, 200],
           'n_epochs': [20],
-          'batch_size': [100],
-          'n_hidden': [200],
+          'batch_size': [50, 100],
+          'n_hidden': [200, 500],
           'normalize_inputs': [True]}),
 
           #ae : {'lr': 0.001, 'n_code': 100, 'n_epochs': 20, 'batch_size': 100, 'n_hidden': 200, 'normalize_inputs': True}
         (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS,
                         **ae_params),
-         {'lr': [0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100],
+         {'lr': [0.0001 ,0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+          'n_code': [100, 200],
           'n_epochs': [20],
-          'batch_size': [100],
-          'n_hidden': [200],
+          'batch_size': [50, 100],
+          'n_hidden': [200, 500],
           'normalize_inputs': [True]}),
           #aec : {'lr': 0.01, 'n_code': 100, 'n_epochs': 20, 'batch_size': 100, 'n_hidden': 200, 'normalize_inputs': True}
-        (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS_WITH_TEXT,
-                        **ae_params),
-         {'lr': [0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100],
-          'n_epochs': [20],
-          'batch_size': [100],
-          'n_hidden': [200],
-          'normalize_inputs': [True]}),
+       # (AAERecommender(adversarial=False, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS_WITH_TEXT,
+       #                 **ae_params),
+       #  {'lr': [0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+       #   'n_code': [100],
+       #   'n_epochs': [20],
+       #   'batch_size': [100],
+       #   'n_hidden': [200],
+       #   'normalize_inputs': [True]}),
 
         # *** DAEs
         (DAERecommender(conditions=None, **ae_params),
-         {'lr': [0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [200],
+         {'lr': [0.0001 ,0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+          'n_code': [100, 200],
           'n_epochs': [20],
-          'batch_size': [100],
-          'n_hidden': [200],
+          'batch_size': [50, 100],
+          'n_hidden': [200, 500],
           'normalize_inputs': [True]}),
           #dae : {'lr': 0.01, 'n_code': 200, 'n_epochs': 20, 'batch_size': 100, 'n_hidden': 200, 'normalize_inputs': True}
         (DAERecommender(conditions=CONDITIONS, **ae_params),
-         {'lr': [0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100],
+         {'lr': [0.0001 ,0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+          'n_code': [100, 200],
           'n_epochs': [20],
-          'batch_size': [100],
-          'n_hidden': [200],
+          'batch_size': [50, 100],
+          'n_hidden': [200, 500],
           'normalize_inputs': [True]}),
           #daec : {'lr': 0.01, 'n_code': 100, 'n_epochs': 20, 'batch_size': 100, 'n_hidden': 200, 'normalize_inputs': True}
-        (DAERecommender(conditions=CONDITIONS_WITH_TEXT, **ae_params),
-         {'lr': [0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100],
-          'n_epochs': [20],
-          'batch_size': [100],
-          'n_hidden': [200],
-          'normalize_inputs': [True]}),
+        #(DAERecommender(conditions=CONDITIONS_WITH_TEXT, **ae_params),
+        # {'lr': [0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+        #  'n_code': [100],
+        #  'n_epochs': [20],
+        #  'batch_size': [100],
+        #  'n_hidden': [200],
+        #  'normalize_inputs': [True]}),
 
         # *** VAEs
         (VAERecommender(conditions=None, **vae_params),
-         {'lr': [0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100],
+         {'lr': [0.0001 ,0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+          'n_code': [100, 200],
           'n_epochs': [20],
-          'batch_size': [50],
-          'n_hidden': [200],
+          'batch_size': [50, 100],
+          'n_hidden': [200, 500],
           'normalize_inputs': [True]
           }),
           #vae : {'lr': 0.01, 'n_code': 100, 'n_epochs': 20, 'batch_size': 50, 'n_hidden': 200, 'normalize_inputs': True}
         (VAERecommender(conditions=CONDITIONS, **vae_params),
-         {'lr': [0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100],
+         {'lr': [0.0001 ,0.001, 0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+          'n_code': [100, 200],
           'n_epochs': [20],
-          'batch_size': [50],
-          'n_hidden': [200],
+          'batch_size': [50, 100],
+          'n_hidden': [200, 500],
           'normalize_inputs': [True]
           }),
           #vaec : {'lr': 0.01, 'n_code': 100, 'n_epochs': 20, 'batch_size': 50, 'n_hidden': 200, 'normalize_inputs': True}
-        (VAERecommender(conditions=CONDITIONS_WITH_TEXT, **vae_params),
-         {'lr': [0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
-          'n_code': [100],
-          'n_epochs': [20],
-          'batch_size': [50],
-          'n_hidden': [200],
-          'normalize_inputs': [True]
-          }),
+        #(VAERecommender(conditions=CONDITIONS_WITH_TEXT, **vae_params),
+        # {'lr': [0.01],  # [0.0001, 0.0005, 0.001, 0.005, 0.01, 0.05],
+        #  'n_code': [100],
+        #  'n_epochs': [20],
+        #  'batch_size': [50],
+        #  'n_hidden': [200],
+        #  'normalize_inputs': [True]
+        #  }),
 
         # *** AAEs
         (AAERecommender(adversarial=True, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=None, **ae_params),
          {'prior': ['gauss'],
-          'gen_lr': [0.001],
-          'reg_lr': [ 0.01],
-          'n_code': [200],
+          'gen_lr': [0.0001 ,0.001, 0.01],
+          'reg_lr': [0.0001 ,0.001, 0.01],
+          'n_code': [100, 200],
           'n_epochs': [20],
-          'batch_size': [50],
-          'n_hidden': [500],
+          'batch_size': [50, 100],
+          'n_hidden': [200, 500],
           'normalize_inputs': [True]},),
           #aae : {'prior': 'gauss', 'gen_lr': 0.001, 'reg_lr': 0.01, 'n_code': 200, 'n_epochs': 20, 'batch_size': 50, 'n_hidden': 500, 'normalize_inputs': True}
         (
         AAERecommender(adversarial=True, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS, **ae_params),
         {'prior': ['gauss'],
-         'gen_lr': [0.001],
-         'reg_lr': [0.01],
-         'n_code': [100],
+         'gen_lr': [0.0001 ,0.001, 0.01],
+         'reg_lr': [0.0001 ,0.001, 0.01],
+         'n_code': [100, 200],
          'n_epochs': [20],
-         'batch_size': [50],
-         'n_hidden': [200],
+         'batch_size': [50, 100],
+         'n_hidden': [200, 500],
          'normalize_inputs': [True]},),
          #aaec : {'prior': 'gauss', 'gen_lr': 0.001, 'reg_lr': 0.01, 'n_code': 100, 'n_epochs': 20, 'batch_size': 50, 'n_hidden': 200, 'normalize_inputs': True}
-        (AAERecommender(adversarial=True, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS_WITH_TEXT,
-                        **ae_params),
-         {'prior': ['gauss'],
-         'gen_lr': [0.001],
-         'reg_lr': [0.01],
-         'n_code': [100],
-         'n_epochs': [20],
-         'batch_size': [50],
-         'n_hidden': [200],
-         'normalize_inputs': [True]},),
+       # (AAERecommender(adversarial=True, prior='gauss', gen_lr=0.001, reg_lr=0.001, conditions=CONDITIONS_WITH_TEXT,
+       #                 **ae_params),
+       #  {'prior': ['gauss'],
+       #  'gen_lr': [0.001],
+       #  'reg_lr': [0.01],
+       #  'n_code': [100],
+       #  'n_epochs': [20],
+       #  'batch_size': [50],
+       #  'n_hidden': [200],
+       #  'normalize_inputs': [True]},),
     ]
 
     main(outfile=args.outfile, min_count=args.min_count, drop=args.drop, n_folds=args.n_folds, model_idx=args.model_idx, fold_index=args.fold_index)

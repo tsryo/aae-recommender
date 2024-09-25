@@ -77,7 +77,7 @@ requirements = [
 	'setuptools==60.2.0',
 	'simplegeneric==0.8.1',
 	'six==1.16.0',
-	'sklearn==0.0.post1',
+#	'sklearn==0.0.post1',
 	'smart-open==6.2.0',
 	'spacy==3.6.1',
 	'spacy-legacy==3.0.12',
